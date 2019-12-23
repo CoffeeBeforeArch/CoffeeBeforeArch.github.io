@@ -4,4 +4,17 @@ Hey everyone I'm Nick, and welcome to the CoffeeBeforeArch GitHub page! I'm crea
 
 The content I create reflects how I would have wanted to learn about programming, optimization, and architecture. Hopefully it helps others that are teaching themselves about computer science like I did.
 
-### Content
+## Setup
+
+A few people have been curious about my software/hardware setup. I've therefore provided a list of these things below, with a brief rational behind the choices.
+
+### Software
+#### Operating System - Ubuntu 18.04
+If you're looking to try a GNU-Linux operating system, Ubuntu is a great place to start. It was the first distribution that I used, and supports all the software I need. There are more do-it-yourself distrubutions (like Arch), but I've never needed that level of customization.
+
+#### Text Editor - VIM
+I use VIM because it was the first text editor introduced to me. I have no ill will against people that use Emacs, Atom, etc., because it's a pointless debate. Use whatever you're comfortable with.
+
+### Hardware
+
+
