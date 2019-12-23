@@ -1,10 +1,10 @@
-## Welcome to GitHub Pages
+## CoffeeBeforeArch - The Github Page
 
-You can use the [editor on GitHub](https://github.com/CoffeeBeforeArch/CoffeeBeforeArch.github.io/edit/master/index.md) to maintain and preview the content for your website in Markdown files.
+Hey everyone I'm Nick, and welcome to the CoffeeBeforeArch GitHub page! I'm creating 100% open teaching content on a variety of topics, including introductory C++ programming, performance optimization and benchmarking, and GPU architecture.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+The content I create reflects how I would have wanted to learn about programming, optimization, and architecture. Hopefully it helps others that are teaching themselves about computer science like I did.
 
-### Markdown
+### Content
 
 Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
 
