@@ -17,6 +17,14 @@ I use VIM because it was the first text editor introduced to me. I have no ill w
 
 I use the [amix vimrc](https://github.com/amix/vimrc). It is incredibly easy to install, and contains almost every plugin you could want. The single modification I have made to this configuration is the addition of the [ClangFormat plugin](https://github.com/rhysd/vim-clang-format). [ClangFormat](http://clang.llvm.org/docs/ClangFormat.html) is a great tool for automatically formatting code. Personally, I use the Google C++ style. I have modified my .vimrc file to bind a function key to automatically run ClangFormat.
 
-### Hardware
+#### Compiler - GCC, Clang, NVCC, PGI
+For many of my C++ programming videos, I use gcc/g++. This is because it's the default compiler on Linux, and many people are familier with. Clang is my preferred compiler becauase of how modular the infrastrucutre is. I have recently started doing more compiler work, and it is really the only choice. Performance seems to be better using Clang as well.
 
+The majority of programming I do is for GPUs (specifically NVIDIA ones). As a result NVCC is the primary compiler I use when writing CUDA code. However, I do use Clang when doing GPU compiler research. I use the PGI compiler when looking into pragma-based GPU programming with OpenACC.
+
+#### Debugging - Valgrind, GDB, CUDA-GDB, Address Sanitizer
+Valgrind, GDB, and CUDA-GDB are the primary debuggers I use.  Address Sanitizer is another good option that can speed up the detection of memory corruption bugs compared to Valgrind.
+
+#### Build Software - CMake
+CMake is a common tool used by industry of building and testing software. Reduced down, it's a tool for automatically generating Makefiles. It's fairly easy to get started with CMake, and I've been gradually integrating it with all of my personal projects.
 
