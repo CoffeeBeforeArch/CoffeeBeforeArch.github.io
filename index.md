@@ -4,6 +4,9 @@ Hey everyone I'm Nick, and welcome to the CoffeeBeforeArch GitHub page! I'm crea
 
 The content I create reflects how I would have wanted to learn about programming, optimization, and architecture. Hopefully it helps others that are teaching themselves about computer science like I did.
 
+## Recent Posts
+[Tutorial on False Sharing]({% post_url 2019-12-28-False-Sharing-Tutorial %})
+
 ## Setup
 
 A few people have been curious about my software/hardware setup. I've therefore provided a list of these things below, with a brief rational behind the choices.
