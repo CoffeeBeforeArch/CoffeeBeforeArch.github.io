@@ -15,11 +15,7 @@ If you're looking to try a GNU-Linux operating system, Ubuntu is a great place t
 #### Text Editor - VIM
 I use VIM because it was the first text editor introduced to me. I have no ill will against people that use Emacs, Atom, etc., because it's a pointless debate. Use whatever you're comfortable with.
 
-I use the [amix vimrc](https://github.com/amix/vimrc). It is incredibly easy to install, and contains almost every plugin you could want.
-
-The single modification I have made to this configuration is the addition of the [ClangFormat plugin](https://github.com/rhysd/vim-clang-format).
-
-[ClangFormat](http://clang.llvm.org/docs/ClangFormat.html) is a great tool for automatically formatting code. Personally, I use the Google C++ style. I have modified my .vimrc file to bind a function key to automatically run ClangFormat.
+I use the [amix vimrc](https://github.com/amix/vimrc). It is incredibly easy to install, and contains almost every plugin you could want. The single modification I have made to this configuration is the addition of the [ClangFormat plugin](https://github.com/rhysd/vim-clang-format). [ClangFormat](http://clang.llvm.org/docs/ClangFormat.html) is a great tool for automatically formatting code. Personally, I use the Google C++ style. I have modified my .vimrc file to bind a function key to automatically run ClangFormat.
 
 ### Hardware
 
