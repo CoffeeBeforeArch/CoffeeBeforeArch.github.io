@@ -36,7 +36,7 @@ void work(std::atomic<int>& a) {
 ```
 All we are doing is atomically incrementing some atomic integer _a_ 100k times. Let's say that we want to implement this in a single thread, and call our work function 4 times. We could do something like this:
 ```cpp
-void singleThread() {  
+void singleThread() {
   // Create a single atomic integer
   std::atomic<int> a;
   a = 0;
@@ -57,7 +57,7 @@ void directSharing() {
   // Create a single atomic integer
   std::atomic<int> a;
   a = 0;
-  
+
   // Four threads all sharing one atomic<int>
   std::thread t1([&]() {work(a)});
   std::thread t2([&]() {work(a)});
@@ -74,7 +74,114 @@ void directSharing() {
 
 This isn't false sharing. This is *direct* sharing. All four threads are incrementing the same atomic integer *a*. The cache line that *a* sits on will bounce between the different cores the threads are scheduled to, leading to significantly worse performance than if we did all the work in a single thread.
 
-As a best-intentions programmer, we 
-## Benchmarks
+As a well-intentioned programmer, we may try to solve this problem by giving each thread its own atomic integer to increment. This is actually a common optimization strategy in parallel programming. We can reduce the number of shared writes to a single shared location by having threads calculate partial results independently, then merging these partial results. That could look something like this:
+```cpp
+void falseSharing() {
+  // Create a single atomic integer
+  std::atomic<int> a;
+  a = 0;
+  std::atomic<int> b;
+  b = 0;
+  std::atomic<int> c;
+  c = 0;
+  std::atomic<int> d;
+  d = 0;
 
-Now that we've motivated why we should care about sharing, let's look at some benchmarks that show off false-sharing.
+  // Four threads each with their own atomic<int>
+  std::thread t1([&]() {work(a)});
+  std::thread t2([&]() {work(b)});
+  std::thread t3([&]() {work(c)});
+  std::thread t4([&]() {work(d)});
+
+  // Join the 4 threads
+  t1.join();
+  t2.join();
+  t3.join();
+  t4.join();
+} 
+```
+For simplicity, we ignore the merging of the partial results, as the 3 additional add operations does not significantly change the results.
+
+While it looks like we solved our sharing problem by creating multiple atomic integers, we'll see this has almost the exact same performance as the directSharing benchmark. Why is that? Let's think harder about where those four atomic integers sit in memory. We can print out their addresses like so:
+```cpp
+void print() {
+  std::atomic<int> a;
+  std::atomic<int> b;
+  std::atomic<int> c;
+  std::atomic<int> d;
+ 
+  // Print out the addresses
+  std::cout << "Address of atomic<int> a - " << &a << '\n';
+  std::cout << "Address of atomic<int> b - " << &b << '\n';
+  std::cout << "Address of atomic<int> c - " << &c << '\n';
+  std::cout << "Address of atomic<int> d - " << &d << '\n';
+}
+```
+
+Compiling with gcc-10, I got the following prints:
+```
+Address of atomic<int> a - 0x7ffe5dd94f6c
+Address of atomic<int> b - 0x7ffe5dd94f68
+Address of atomic<int> c - 0x7ffe5dd94f64
+Address of atomic<int> d - 0x7ffe5dd94f60
+```
+
+Notice that all of our atomics are four bytes away from each other. We already discussed that cache coherence is typically at the cache-line/block granularity, and cache lines in modern processors are typically 64 bytes. Therefore, our 4 atomics allocated like this wound up on the same cache line. When each thread grabs its dedicated atomic integer, it grabs all four. There's our false sharing!
+
+All hope is not lost. We just need to space the atomic integers out so that they are not sitting next to each other in memory. We can do this easily by placing them in a struct, and setting the alignment to 64 bytes:
+```cpp
+struct alignas(64) AlignedType {
+  AlignedType() { val = 0; }
+  std::atomic<int> val;
+};
+```
+
+Let's print out the addresses of four of our *AlignedType* structs:
+```cpp
+void print() {
+  AlignedType a{};
+  AlignedType b{};
+  AlignedType c{};
+  AlignedType d{};
+ 
+  // Print out the addresses
+  std::cout << "Address of AlignedType a - " << &a << '\n';
+  std::cout << "Address of AlignedType b - " << &b << '\n';
+  std::cout << "Address of AlignedType c - " << &c << '\n';
+  std::cout << "Address of AlignedType d - " << &d << '\n';
+}
+```
+Compiling with gcc-10, I got the following prints:
+```
+Address of AlignedType a - 0x7ffd7dc7a300
+Address of AlignedType b - 0x7ffd7dc7a2c0
+Address of AlignedType c - 0x7ffd7dc7a280
+Address of AlignedType d - 0x7ffd7dc7a240
+```
+Now we have 64 bytes between each of our objects. This means that none of our atomics will be on the same cache line! Our modified code using this *AlginedType* looks like this:
+```cpp
+void diff_line() {
+  AlignedType a{};
+  AlignedType b{};
+  AlignedType c{};
+  AlignedType d{};
+ 
+  // Launch the four threads now using our aligned data
+  std::thread t1([&]() { work(a.val); });
+  std::thread t2([&]() { work(b.val); });
+  std::thread t3([&]() { work(c.val); });
+  std::thread t4([&]() { work(d.val); });
+ 
+  // Join the threads
+  t1.join();
+  t2.join();
+  t3.join();
+  t4.join();
+ }
+```
+
+## Benchmarking and Profiling
+To benchmark the previously listed code, I used [Google Benchmark](https://github.com/google/benchmark). I used perf Linux profiler for profiling.
+
+### Execution time results
+
