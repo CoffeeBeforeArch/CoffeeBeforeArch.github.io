@@ -230,6 +230,32 @@ Percent│
        │    ← retq
 ```
 
+0x186a0 translates to 100k decimal (the number of iterations in our *work()* loop. The loop corresponds to only three instructions:
+
+```x86asm
+10: lock   incl   -0x4(%rsp)
+    dec    %eax
+    jne    10
+```
+If you have not compiled with -march=native, the incl instruction may be replaced with and add instruction:
+
+```x86asm
+10:   lock   addl   $0x1,(%rdx)
+```
+
+```x86asm
+Percent│
+       │    0000000000406b20 <std::thread::_State_impl<std::thread::_Invoker<std::tuple<diff_var()::{lambda()#2}> > >::_M_run()>:
+       │    _ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ8diff_varvEUlvE0_EEEEE6_M_runEv():
+  0.29 │      mov    0x8(%rdi),%rdx
+       │      mov    $0x186a0,%eax
+       │      nop
+ 99.59 │10:   lock   incl   (%rdx)
+       │      dec    %eax
+  0.12 │    ↑ jne    10
+       │    ← retq
+
+```
 
 
 ### Execution time results
