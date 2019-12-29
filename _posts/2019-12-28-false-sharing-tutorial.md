@@ -201,7 +201,7 @@ BENCHMARK(noSharing)->UseRealTime()->Unit(benchmark::kMillisecond);
 ### Our benchmarks at the assembly level
 Before we take a look at the results, it's important we understand what our code is doing at the lowest level. For our *singleThread* benchmark, four calls to the *work()* function are inlined, leading to four tight loops that do an atomic increment:
 
-```x86asm
+```assembly
 Percent│
        │    0000000000406e50 <single_thread()>:
        │    _Z13single_threadv():
@@ -232,18 +232,20 @@ Percent│
 
 0x186a0 translates to 100k decimal (the number of iterations in our *work()* loop. The loop corresponds to only three instructions:
 
-```x86asm
+```assembly
 10: lock   incl   -0x4(%rsp)
     dec    %eax
     jne    10
 ```
 If you have not compiled with -march=native, the incl instruction may be replaced with and add instruction:
 
-```x86asm
+```assembly
 10:   lock   addl   $0x1,(%rdx)
 ```
 
-```x86asm
+In either case, all the time in our microbenchmarks are spent doing the increment of our atomic integer. 
+
+```assembly
 Percent│
        │    0000000000406b20 <std::thread::_State_impl<std::thread::_Invoker<std::tuple<diff_var()::{lambda()#2}> > >::_M_run()>:
        │    _ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ8diff_varvEUlvE0_EEEEE6_M_runEv():
