@@ -26,7 +26,7 @@ Cache coherence is often defined using two invariants, as taken from [A Primer o
 
 2. Data-Value Invariant - The value at any given memory location *A* at the start of an epoch is the same as the value of the memory location at the end of its last read-write epoch.
 
-Invariant 1 shows why sharing read-only data is OK while sharing writable data can cause performance problems. When one core wants to write to a memory location, access must be taken away from other cores (to keep them from reading old/stale values). Access is revoked through invalidations copies of the data other cores have in their cache hierarchies. Once the core trying to perform a write has gained exclusive access, it can perform its write operation.
+Invariant 1 shows why sharing read-only data is OK while sharing writable data can cause performance problems. When one core wants to write to a memory location, access to that location must be taken away from other cores (to keep them from reading old/stale values). Access is taken away by invalidating copies of the data other cores have in their cache hierarchy. Once the core trying to perform a write has gained exclusive access, it can perform its write operation.
 
 But what exactly is getting invalidated? Typically, it is a cache-line/block. Cache-lines/blocks strike a good balance between control and overhead. Finer-grained coherence (say at the byte-level) would require us to maintain a coherence state for each byte of memory in our caches. Coarser-grained coherence (say at the page-level) can lead to the unnecessary invalidation of large pieces of memory.
 
@@ -34,7 +34,7 @@ To simplify our discussion, we will simply refer to the range of data for which 
 
 ### Where does false sharing come from?
 
-False sharing occurs when data from multiple threads that was not meant to be shared gets mapped to the same coherence block. When this happens, cores accessing seeming unrelated data send invalidations to each other. This can lead to performance that looks like multiple threads are fighting over the same data. Let's consider a simple optimization case-study where a well-intentioned programmer optimizes code without thinking about the underlying architectures.
+False sharing occurs when data from multiple threads that was not meant to be shared gets mapped to the same coherence block. When this happens, cores accessing seeming unrelated data still send invalidations to each other when performing writes. This can lead to performance that looks like multiple threads are fighting over the same data. Let's consider a simple optimization case-study where a well-intentioned programmer optimizes code without thinking about the underlying architectures.
 
 ## Optimization Case Study
 
@@ -184,7 +184,7 @@ Address of AlignedType c - 0x7ffd7dc7a280
 Address of AlignedType d - 0x7ffd7dc7a240
 ```
 
-Now we have 64 bytes between each of our objects.Now are atomics are guaranteed to be on different cache-lines/blocks! Our modified code using this *AlginedType* looks like this:
+Now we have 64 bytes between each of our objects. Our atomics are now guaranteed to be on different cache-lines/blocks! Our modified code using this *AlginedType* looks like this:
 
 ```cpp
 void noSharing() {
@@ -228,7 +228,7 @@ BENCHMARK(noSharing)->UseRealTime()->Unit(benchmark::kMillisecond);
 
 ### Our benchmarks at the assembly level
 
-Before we take a look at the results, we must understand what our code is doing at the lowest level. The following pieces of assembly were taken from perf reports, where the column labled "Percent" corresponds to where the profiler is saying our program is spending most time.
+Before we take a look at the results, it's important to understand what our code is doing at the lowest level. The following pieces of assembly were taken from perf reports, where the column labled "Percent" corresponds to where the profiler is saying our program is spending most time.
 
 For our *singleThread* benchmark, four calls to the *work()* function are inlined, leading to four tight loops that do an atomic increment:
 
@@ -290,7 +290,7 @@ Percent│
        │    ← retq
 
 ```
-As is the case for the *singleThread* benchmark, all three of the multithreaded benchmarks spend all their time on the atomic increment.
+As is the case for the *singleThread* benchmark, all three of the multithreaded benchmarks spend most of their time on the atomic increment.
 
 ### Execution time results
 
@@ -357,7 +357,7 @@ These look incredibly similar to our *falseSharing* results:
 183,018,811     L1-dcache-load-misses   #   40.07% of all L1-dcache hits
 ```
 
-But this isn't incredibly surprising. At the lowest level, these benchmarks behave almost identically. In each of these benchmarks, all four of the threads compete for the same cache-line/block. It does not matter if they are accessing the same or different parts of that cache-line/block, because both cause the same invalidation message.
+But this isn't incredibly surprising. At the lowest level, these benchmarks behave almost identically. In each of these benchmarks, all four of the threads compete for the same cache-line/block. It does not matter if they are accessing the same or different parts of that cache-line/block, because both cause the same invalidation request.
 
 The hit rate from our *noSharing* benchmark, however, is closer to that of the *singleThread* benchmark:
 
@@ -385,4 +385,4 @@ Thanks for reading,
 
 - Our benchmarks could be rewritten using atomic references that have been introduced in C++20. These provide an excellent way to have selective atomicity on variables.
 - Real workloads typically do more that have 4 threads only compete for a single cache-line. However, there may be regions of execution where this pathological case exists, and still causes a significant performance impact.
-- Why do you need to use an atomic integer at all? [Here's](https://stackoverflow.com/a/39396999/12482128) a Stack Overflow answer that clarifies that question.
+- Why do you need to use an atomic integer at all? [Here's](https://stackoverflow.com/a/39396999/12482128) a Stack Overflow response answers that question.
