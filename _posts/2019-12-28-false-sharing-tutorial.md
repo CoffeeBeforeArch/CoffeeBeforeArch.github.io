@@ -20,6 +20,8 @@ Why is sharing data so bad? It's not! If we have many threads that are only read
 
 ### Cache Coherence
 
+![Invalidation of cache block on write](/assets/coherence.png)
+
 Cache coherence is often defined using two invariants, as taken from [A Primer on Memory Consistency and Cache Coherence](https://www.morganclaypool.com/doi/abs/10.2200/S00346ED1V01Y201104CAC016):
 
 1. Single-Writer, Multiple Reader Invariant: For a memory location *A*, at any given logical time, there exists only a single core that may write to *A* (and read from *A*), or some number of cores (maybe 0) that may only read *A*.
