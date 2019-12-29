@@ -290,7 +290,7 @@ As is the case for the *singleThread* benchmark, all three of the multithreaded 
 
 ### Execution time results
 
-Execution time results for our four microbenchmarks can be found below:
+For each of the benchmarks we will be focusing on the wall clock time (column labled "Time"). This is because the CPU time (column labled CPU) only measures the time spent by the main thread, which is not helpful for the multi-threaded benchmarks. Execution time results for our four microbenchmarks can be found below.
 
 ```
 ------------------------------------------------------------------
@@ -378,4 +378,4 @@ Thanks for reading,
 ### Additional discussion points
 
 - Our benchmarks could be rewritten using atomic references that have been introduced in C++20. These provide an excellent way to have selective atomicity on variables.
-- Real workloads typically do more that have 4 threads only compete for a single cache-line. However, there may be regions of execution where this pathological case exists, especially if that code has latency requirements.
+- Real workloads typically do more that have 4 threads only compete for a single cache-line. However, there may be regions of execution where this pathological case exists, and still causes a significant performance impact.
