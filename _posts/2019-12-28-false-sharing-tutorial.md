@@ -198,6 +198,40 @@ static void benchName(benchmark::State& s) {
 BENCHMARK(noSharing)->UseRealTime()->Unit(benchmark::kMillisecond);
 ```
 
+### Our benchmarks at the assembly level
+Before we take a look at the results, it's important we understand what our code is doing at the lowest level. For our *singleThread* benchmark, four calls to the *work()* function are inlined, leading to four tight loops that do an atomic increment:
+
+```asm
+Percent│
+       │    0000000000406e50 <single_thread()>:
+       │    _Z13single_threadv():
+       │      xor    %eax,%eax
+       │      xchg   %eax,-0x4(%rsp)
+       │      mov    $0x186a0,%eax
+       │      nop
+ 25.16 │10:   lock   incl   -0x4(%rsp)
+       │      dec    %eax
+       │    ↑ jne    10
+       │      mov    $0x186a0,%eax
+       │      xchg   %ax,%ax
+ 24.84 │20:   lock   incl   -0x4(%rsp)
+       │      dec    %eax
+       │    ↑ jne    20
+       │      mov    $0x186a0,%eax
+       │      xchg   %ax,%ax
+ 24.95 │30:   lock   incl   -0x4(%rsp)
+       │      dec    %eax
+       │    ↑ jne    30
+       │      mov    $0x186a0,%eax
+       │      xchg   %ax,%ax
+ 25.05 │40:   lock   incl   -0x4(%rsp)
+       │      dec    %eax
+       │    ↑ jne    40
+       │    ← retq
+```
+
+
+
 ### Execution time results
 Execution time results for our four microbenchmarks can be found below:
 ```
@@ -221,4 +255,14 @@ falseSharing/real_time       0.710 ms        0.053 ms          998
 noSharing/real_time          0.245 ms        0.044 ms         2614
 ```
 
-Another avenue we can explore is the effect of varying the number of threads launched in our benchmarks.
+How does the performance look when we scale the number of threads? More threads means more contention on a single memory location. Below are the results for our *falseSharing* benchmark using 2, 4, and 8 threads (with the ammount of work appropriately scaled as well):
+```
+-----------------------------------------------------------------
+Benchmark                       Time             CPU   Iterations
+-----------------------------------------------------------------
+twoThreads/real_time         6.49 ms        0.050 ms          106
+fourThreads/real_time        7.95 ms        0.077 ms           90
+eightThreads/real_time       9.24 ms        0.125 ms           77
+```
+
+### L1 cache hit rate
