@@ -29,6 +29,7 @@ Cache coherence is often defined using two invariants, as taken from [A Primer o
 Invariant 1 shows why sharing read-only data is OK while sharing writable data can cause performance problems. When one core wants to write to a memory location, access must be taken away from other cores (to keep them from reading old/stale values). Access is revoked through invalidations copies of the data other cores have in their cache hierarchies. Once the core trying to perform a write has gained exclusive access, it can perform its write operation.
 
 But what exactly is getting invalidated? Typically, it is a cache-line/block. Cache-lines/blocks strike a good balance between control and overhead. Finer-grained coherence (say at the byte-level) would require us to maintain a coherence state for each byte of memory in our caches. Coarser-grained coherence (say at the page-level) can lead to the unnecessary invalidation of large pieces of memory.
+
 To simplify our discussion, we will simply refer to the range of data for which a single coherence state is maintained as a *coherence block* (a page or cache-line/block in practice).
 
 ### Where does false sharing come from?
@@ -47,6 +48,7 @@ void work(std::atomic<int>& a) {
 }
 
 ```
+
 All we are doing is atomically incrementing an atomic integer _a_ 100k times. Let's say that we want to implement this in a single thread. All we need to do is call our work function 4 times. We implement this like so:
 
 ```cpp
@@ -63,7 +65,9 @@ void singleThread() {
 }
 ```
 
-Note, the only reason we are using an atomic integer for a single-threaded implementation is to better isolate the overhead of sharing. You could always replace it with a regular integer if you are only using a single thread. A terrible way to speed up this computation is to *only* throw threads at the problem, and have each thread handle one of the function calls. That could look something like this:
+Note, the only reason we are using an atomic integer for a single-threaded implementation is to better isolate the overhead of sharing. You could always replace it with a regular integer if you are only using a single thread.
+
+A terrible way to speed up this computation is to *only* throw threads at the problem, and have each theads handle one of the function calls. That could look something like this:
 
 ```cpp
 void directSharing() {
