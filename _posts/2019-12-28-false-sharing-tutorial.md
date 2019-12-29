@@ -353,7 +353,7 @@ These look incredibly similar to our *falseSharing* results:
 183,018,811     L1-dcache-load-misses   #   40.07% of all L1-dcache hits
 ```
 
-But this isn't incredibly surprising. At the lowest level, these benchmarks behave almost identically. In each of these benchmarks, all four of the threads are compete for the same cache-line/block. It does not matter if they are accessing the same or different parts of that cache-line/block, because both cause the same invalidation message.
+But this isn't incredibly surprising. At the lowest level, these benchmarks behave almost identically. In each of these benchmarks, all four of the threads compete for the same cache-line/block. It does not matter if they are accessing the same or different parts of that cache-line/block, because both cause the same invalidation message.
 
 The hit rate from our *noSharing* benchmark, however, is closer to that of the *singleThread* benchmark:
 
