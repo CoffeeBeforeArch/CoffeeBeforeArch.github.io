@@ -160,7 +160,7 @@ Address of AlignedType d - 0x7ffd7dc7a240
 ```
 Now we have 64 bytes between each of our objects. This means that none of our atomics will be on the same cache line! Our modified code using this *AlginedType* looks like this:
 ```cpp
-void diff_line() {
+void noSharing() {
   AlignedType a{};
   AlignedType b{};
   AlignedType c{};
@@ -177,11 +177,48 @@ void diff_line() {
   t2.join();
   t3.join();
   t4.join();
- }
+}
 ```
 
 ## Benchmarking and Profiling
-To benchmark the previously listed code, I used [Google Benchmark](https://github.com/google/benchmark). I used perf Linux profiler for profiling.
+The following results were collected using [Google Benchmark](https://github.com/google/benchmark) and the [perf Linux profiler](https://perf.wiki.kernel.org/index.php/Main_Page). Each of our benchmarks follow the following form, and was compiled using:
+
+```bash
+g++ false_sharing.cpp -lbenchmark -lpthread -O3 -march=native
+```
+
+The benchmarks also follow the following structure, where *benchName* and *funcName* are placeholder names.
+
+```cpp
+static void benchName(benchmark::State& s) {
+  while (s.KeepRunning()) {
+    funcName();    
+  }
+ }
+BENCHMARK(noSharing)->UseRealTime()->Unit(benchmark::kMillisecond);
+```
 
 ### Execution time results
+Execution time results for our four microbenchmarks can be found below:
+```
+------------------------------------------------------------------
+Benchmark                        Time             CPU   Iterations
+------------------------------------------------------------------
+singleThread                  2.35 ms         2.35 ms          300
+directSharing/real_time       7.69 ms        0.084 ms           95
+falseSharing/real_time        7.78 ms        0.083 ms           92
+noSharing/real_time           1.75 ms        0.083 ms          386
+```
 
+Unsurprisingly, our *directSharing* and *falseSharing* benchmarks take roughly the same execution time. In fact, they are over three times slower than the *singleThread* benchmark. Our *noSharing* benchmark had the best performance, about 25% faster than the single threaded baseline. Why is it not 4x faster? Creating and joining threads isn't free! If we made our *work()* function do only 10k increments, our *singleThread* and *noSharing* take roughly the same time:
+```
+------------------------------------------------------------------
+Benchmark                        Time             CPU   Iterations
+------------------------------------------------------------------
+singleThread                 0.233 ms        0.233 ms         3001
+directSharing/real_time      0.668 ms        0.059 ms          762
+falseSharing/real_time       0.710 ms        0.053 ms          998
+noSharing/real_time          0.245 ms        0.044 ms         2614
+```
+
+Another avenue we can explore is the effect of varying the number of threads launched in our benchmarks.
