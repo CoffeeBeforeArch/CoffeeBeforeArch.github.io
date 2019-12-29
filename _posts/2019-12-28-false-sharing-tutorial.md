@@ -237,13 +237,13 @@ Percent│
     dec    %eax
     jne    10
 ```
-If you have not compiled with -march=native, the incl instruction may be replaced with and add instruction:
+If you have not compiled with -march=native, the incl instruction may be replaced with and addl instruction:
 
 ```assembly
 10:   lock   addl   $0x1,(%rdx)
 ```
 
-In either case, all the time in our microbenchmarks are spent doing the increment of our atomic integer. 
+The code for our multi-threaded benchmarks all look identical. Instead of all four calls to our work function being inlined in the benchmark loop, each thread runs the inlined version of the function.
 
 ```assembly
 Percent│
@@ -258,7 +258,7 @@ Percent│
        │    ← retq
 
 ```
-
+As is the case for the *singleThread* benchmark, all three of the multithreaded benchmarks spend all their time on the atomic increment.
 
 ### Execution time results
 Execution time results for our four microbenchmarks can be found below:
@@ -294,3 +294,35 @@ eightThreads/real_time       9.24 ms        0.125 ms           77
 ```
 
 ### L1 cache hit rate
+Our perf report gives us a decent idea about where our time is being spent in our benchmarks (unsurprisingly, waiting for our atomic increments). However, if we want to know why the performance of these applications differ so greatly, we must look at another metric. Specifically, we will be looking at the L1 cache hit rate using perf stat.
+
+We are looking at cache hit rate because the claim we made about direct and false sharing was that invalidations on cache-lines/blocks was going on. As a result, we'd expect both both the *directSharing* and *falseSharing* benchmarks to have a low L1 hit rate as the cache-line/block bounces between cores, and the *singleThread* and *noSharing* benchmarks we should expect very high hit rates, as each thread should have exclusive access to the atomic integers.
+  
+For the *singleThread* benchmark, we get the expected result, as shown below:
+```
+1,158,985,491   L1-dcache-loads         #   170.514 M/sec 
+319,420         L1-dcache-load-misses   #   0.03% of all L1-dcache hits
+```
+A very high hit rate! If we accesses the same variable 400k times from the same thread, it's probably going to stick around in our L1 cache. But what about two benchmarks with sharing? Our *directSharing* results:
+
+```
+318,186,290     L1-dcache-loads         #   16.242 M/sec
+124,027,868     L1-dcache-load-misses   #   38.98% of all L1-dcache hits
+```
+Look incredibly similar to our *falseSharing* results:
+```
+456,782,494     L1-dcache-loads         #   30.275 M/sec
+183,018,811     L1-dcache-load-misses   #   40.07% of all L1-dcache hits
+```
+But this isn't incredibly surprising. At the lowest level, these benchmarks behave almost identically. All four of our threads are competing for the same cache-line/block in both benchmarks. It does not matter if they are accessing the same or different parts of that cache-line/block, because both will cause the same invalidation.
+
+Our *noSharing* benchmark looks much likes the first:
+```
+1,641,417,172   L1-dcache-loads         #   106.878 M/sec
+54,749,621      L1-dcache-load-misses   #   3.34% of all L1-dcache hits
+``` 
+
+## Concluding remarks
+
+
+
