@@ -224,7 +224,7 @@ BENCHMARK(noSharing)->UseRealTime()->Unit(benchmark::kMillisecond);
 
 ### Our benchmarks at the assembly level
 
-Before we take a look at the results, we must understand what our code is doing at the lowest level. The following pieces of assembly were taken from perf reports, where the column labled "percent" corresponds to where the profiler is saying our program is spending most of its time.
+Before we take a look at the results, we must understand what our code is doing at the lowest level. The following pieces of assembly were taken from perf reports, where the column labled "Percent" corresponds to where the profiler is saying our program is spending most time.
 
 For our *singleThread* benchmark, four calls to the *work()* function are inlined, leading to four tight loops that do an atomic increment:
 
@@ -290,7 +290,9 @@ As is the case for the *singleThread* benchmark, all three of the multithreaded 
 
 ### Execution time results
 
-For each of the benchmarks we will be focusing on the wall clock time (column labled "Time"). This is because the CPU time (column labled CPU) only measures the time spent by the main thread, which is not helpful for the multi-threaded benchmarks. Execution time results for our four microbenchmarks can be found below.
+For each of the benchmarks we will be focusing on the wall clock time (column labled "Time"). This is because the CPU time (column labled CPU) only measures the time spent by the main thread, which is not helpful for the multi-threaded benchmarks. 
+
+Execution time results for our four microbenchmarks can be found below.
 
 ```
 ------------------------------------------------------------------
@@ -338,13 +340,13 @@ For the *singleThread* benchmark, we get the expected result, as shown below:
 319,420         L1-dcache-load-misses   #   0.03% of all L1-dcache hits
 ```
 
-If we access the same variable 400k times from the same thread, it's probably going to stick around in our L1 cache. But what about two benchmarks with sharing? Our *directSharing* results:
+If we access the same variable 400k times from the same thread, it's probably going to stick around in our L1 cache. We should expect our benchmarks with sharing to look similar. Our *directSharing* results are shown below:
 
 ```
 318,186,290     L1-dcache-loads         #   16.242 M/sec
 124,027,868     L1-dcache-load-misses   #   38.98% of all L1-dcache hits
 ```
-Look incredibly similar to our *falseSharing* results:
+These look incredibly similar to our *falseSharing* results:
 
 ```
 456,782,494     L1-dcache-loads         #   30.275 M/sec
@@ -353,14 +355,14 @@ Look incredibly similar to our *falseSharing* results:
 
 But this isn't incredibly surprising. At the lowest level, these benchmarks behave almost identically. In each of these benchmarks, all four of the threads are compete for the same cache-line/block. It does not matter if they are accessing the same or different parts of that cache-line/block, because both cause the same invalidation message.
 
-The hit rate from our *noSharing* benchmark, however, looks much likes the first:
+The hit rate from our *noSharing* benchmark, however, is closer to that of the *singleThread* benchmark:
 
 ```
 1,641,417,172   L1-dcache-loads         #   106.878 M/sec
 54,749,621      L1-dcache-load-misses   #   3.34% of all L1-dcache hits
 ``` 
 
-This was because we ensured our atomic could never be mapped to the same cache lines!
+This was because we ensured our atomics could never be mapped to the same cache line!
 
 ## Concluding remarks
 
@@ -379,3 +381,4 @@ Thanks for reading,
 
 - Our benchmarks could be rewritten using atomic references that have been introduced in C++20. These provide an excellent way to have selective atomicity on variables.
 - Real workloads typically do more that have 4 threads only compete for a single cache-line. However, there may be regions of execution where this pathological case exists, and still causes a significant performance impact.
+- Why do you need to use an atomic integer at all? [Here's](https://stackoverflow.com/a/39396999/12482128) a Stack Overflow answer that clarifies that question.
