@@ -201,7 +201,7 @@ BENCHMARK(noSharing)->UseRealTime()->Unit(benchmark::kMillisecond);
 ### Our benchmarks at the assembly level
 Before we take a look at the results, it's important we understand what our code is doing at the lowest level. For our *singleThread* benchmark, four calls to the *work()* function are inlined, leading to four tight loops that do an atomic increment:
 
-```asm
+```x86asm
 Percent│
        │    0000000000406e50 <single_thread()>:
        │    _Z13single_threadv():
