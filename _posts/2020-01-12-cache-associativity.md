@@ -100,79 +100,43 @@ Percent│
 
 ### Execution time results
 
-For each of the benchmarks we will be focusing on the wall clock time (column labled "Time"). This is because the CPU time (column labled CPU) only measures the time spent by the main thread, which is not helpful for the multi-threaded benchmarks. 
-
 Execution time results for our four microbenchmarks can be found below.
 
 ```
-------------------------------------------------------------------
-Benchmark                        Time             CPU   Iterations
-------------------------------------------------------------------
-singleThread                  2.35 ms         2.35 ms          300
-directSharing/real_time       7.69 ms        0.084 ms           95
-falseSharing/real_time        7.78 ms        0.083 ms           92
-noSharing/real_time           1.75 ms        0.083 ms          386
+--------------------------------------------------------
+Benchmark              Time             CPU   Iterations
+--------------------------------------------------------
+assocBench/0       0.907 ms        0.907 ms          779
+assocBench/1        1.05 ms         1.05 ms          672
+assocBench/2        1.60 ms         1.60 ms          430
+assocBench/3        3.24 ms         3.24 ms          215
+assocBench/4        6.42 ms         6.42 ms          107
+assocBench/5        8.91 ms         8.91 ms           74
+assocBench/6        10.0 ms         10.0 ms           69
+assocBench/7        11.6 ms         11.6 ms           60
+assocBench/8        12.2 ms         12.2 ms           58
+assocBench/9        16.1 ms         16.1 ms           43
 ```
+As predicted, our execution time steadily increases as the stride increases.
 
-Unsurprisingly, our *directSharing* and *falseSharing* benchmarks take roughly the same execution time. They are over three times slower than the *singleThread* benchmark. Our *noSharing* benchmark had the best performance, about 25% faster than the single-threaded baseline. Why is it not 4x faster? Creating and joining threads isn't free! If we made our *work()* function do only 10k increments, our *singleThread* and *noSharing* take roughly the same time:
-
-```
-------------------------------------------------------------------
-Benchmark                        Time             CPU   Iterations
-------------------------------------------------------------------
-singleThread                 0.233 ms        0.233 ms         3001
-directSharing/real_time      0.668 ms        0.059 ms          762
-falseSharing/real_time       0.710 ms        0.053 ms          998
-noSharing/real_time          0.245 ms        0.044 ms         2614
-```
-
-How does the performance look when we scale the number of threads? More threads lead to more contention on a single memory location. Below are the results for our *falseSharing* benchmark using 2, 4, and 8 threads (with the amount of work per thread appropriately scaled):
-
-```
------------------------------------------------------------------
-Benchmark                       Time             CPU   Iterations
------------------------------------------------------------------
-twoThreads/real_time         6.49 ms        0.050 ms          106
-fourThreads/real_time        7.95 ms        0.077 ms           90
-eightThreads/real_time       9.24 ms        0.125 ms           77
-```
+If we knew nothing about associativity, we may have predicted that our execution time would increase until 2^4, and stayed constant afterwards. At a stride of 2^4 (16) elements, each element we access belongs to a different cache line. This is also true for any power of two greater that 2^4. However, our execution time continues to increase. This is because the cache lines we access are mapped to fewer and fewer sets.
 
 ### L1 cache hit rate
 
-Our perf report gives us a decent idea about where our time is being spent in our benchmarks (unsurprisingly, waiting for our atomic increments). However, if we want to know why the performance of these applications differs so significantly, we must look at another metric. The L1 data cache hit rate is an excellent place to start, and we can be access it using perf stat.
-
-For our direct and false sharing benchmarks, we claimed that invalidation requests were being sent back and forth between the cores. As a result, we'd expect both *directSharing* and *falseSharing* to have a low L1 hit rate as the cache-line/block with the atomic integer(s) bounces between cores. Furthermore, we should expect *singleThread* and *noSharing* to have very high hit rates.
-  
-For the *singleThread* benchmark, we get the expected result, as shown below:
+Another statistic we can look at to confirm our increase in cache pressure is our cache miss-rate. Below are the miss-rates for each of the benchmarks:
 
 ```
-1,158,985,491   L1-dcache-loads         #   170.514 M/sec 
-319,420         L1-dcache-load-misses   #   0.03% of all L1-dcache hits
+assocBench/0   L1-dcache-load-misses   #   6.28%  of all L1-dcache hits
+assocBench/1   L1-dcache-load-misses   #   12.53% of all L1-dcache hits
+assocBench/2   L1-dcache-load-misses   #   24.95% of all L1-dcache hits
+assocBench/3   L1-dcache-load-misses   #   48.89% of all L1-dcache hits
+assocBench/4   L1-dcache-load-misses   #   97.42% of all L1-dcache hits
+assocBench/5   L1-dcache-load-misses   #   95.35% of all L1-dcache hits
+assocBench/6   L1-dcache-load-misses   #   97.73% of all L1-dcache hits
+assocBench/7   L1-dcache-load-misses   #   96.70% of all L1-dcache hits
+assocBench/8   L1-dcache-load-misses   #   98.54% of all L1-dcache hits
+assocBench/9   L1-dcache-load-misses   #  172.16% of all L1-dcache hits
 ```
-
-If we access the same variable 400k times from the same thread, it's probably going to stick around in our L1 cache. We should expect our benchmarks with sharing to look similar. Our *directSharing* results are shown below:
-
-```
-318,186,290     L1-dcache-loads         #   16.242 M/sec
-124,027,868     L1-dcache-load-misses   #   38.98% of all L1-dcache hits
-```
-These look incredibly similar to our *falseSharing* results:
-
-```
-456,782,494     L1-dcache-loads         #   30.275 M/sec
-183,018,811     L1-dcache-load-misses   #   40.07% of all L1-dcache hits
-```
-
-But this isn't incredibly surprising. At the lowest level, these benchmarks behave almost identically. In each of these benchmarks, all four of the threads compete for the same cache-line/block. It does not matter if they are accessing the same or different parts of that cache-line/block, because both cause the same invalidation request.
-
-The hit rate from our *noSharing* benchmark, however, is closer to that of the *singleThread* benchmark:
-
-```
-1,641,417,172   L1-dcache-loads         #   106.878 M/sec
-54,749,621      L1-dcache-load-misses   #   3.34% of all L1-dcache hits
-``` 
-
-This was because we ensured our atomics could never be mapped to the same cache line!
 
 ## Concluding remarks
 
