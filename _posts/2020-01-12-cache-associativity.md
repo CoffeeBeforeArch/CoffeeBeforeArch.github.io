@@ -5,18 +5,19 @@ title: Cache Associativity
 
 # Cache Associativity
 
-Understanding why different access patterns lead to different performance results requires us to understand the underlying hardware of our processors. In this tutorial, we will be exploring the effects of cache associativity on performance using a simple power of two acceess pattern. A link to the source code used in this tutorial can be found here:
+Understanding why different access patterns lead to different performance results requires us to understand the underlying hardware of our processors. In this tutorial, we will be exploring the effects of cache associativity on performance using a simple power-of-two acceess pattern, and different sizes of arrays. A link to the source code used in this tutorial can be found here:
+
 - [Source Code](https://github.com/CoffeeBeforeArch/uarch_benchmarks/tree/master/associativity)
 
 ## Background
 
-Before we dig into our benchmarks, we must first talk about the structure of modern caches. Caches typically come in three varieties, each with their own set of pros and cons. While we could discuss, the organization and design tradeoffs of caches in length, we'll limit our discussion to only what is necessary to understand the observed effects.
+Before we dig into our benchmarks, we must first talk about the structure of modern caches. Caches typically come in three varieties, each with their own set of pros and cons. While we could discuss, the organization and design tradeoffs of caches in length, we'll limit our discussion to only what is necessary to understand what we are measuring.
 
 ### Direct Mapped Caches
 
 Direct mapped caches are the most basic form a cache. In a direct mapped cache, each cache block has single location where it can be stored. This design has a number of benefits. For example, when we look up an address in our cache, we only need to check a single location. Furthermore, replacing cache blocks becomes simple. If we load cache block _B_, and cache block _A_, is mapped to the same location and already there, we simply kick out _A_ from the cache.
 
-However, this simplicity has some significant disadvantages in terms of performance. If we repeatadly access cache lines that are mapped to the same location, we end up kicking out data we will access in the near future. These pathological access patterns are common enough where we don't see many direct mapped caches anymore.
+However, this simplicity has some significant disadvantages in terms of performance. If we repeatadly access cache lines that are mapped to the same location, we end up kicking out data we will access in the near future. These pathological access patterns are commaon enough where we don't see many direct mapped caches anymore.
 
 ### Fully Associative Caches
 
@@ -26,7 +27,7 @@ At the other extreme we have fully associative caches. With a fully associative 
 
 Set-associative caches represent a comprimise between direct mapped, and fully associative caches. In a set-associative cache, each cache line can be placed in one of _M_ ways in the set it has been mapped to. This compromise allows us to avoid many of the pathological access patterns of a direct mapped cache, while avoiding the significant hardware cost of fully associative caches. These are the most common types of caches in modern architectures.
 
-## Problematic Access Patterns for Set-Associative Caches
+### Problematic Access Patterns for Set-Associative Caches
 
 While a set-associative cache is good, there are still access patterns that can lead to poor performance. If we access cache lines that all happen to map to the same set, there are still on _M_ places to put them. This tends to happen with power of 2 stride access patterns. The mappings of cache blocks to sets is fairly simple. When we increase the power of two of our stride, the cache lines we access are mapped to fewer and fewer sets, leading to greater contention.
 
@@ -67,7 +68,8 @@ static void assocBench(benchmark::State &s) {
 BENCHMARK(assocBench)->DenseRange(0, 9)->Unit(benchmark::kMillisecond);
 ```
 
-The caches on the Skylake processor this was run on are organized as follows:
+The caches on the Kaby Lake processor this was run on are organized as follows:
+
 ```bash
 LEVEL1_ICACHE_SIZE                 32768
 LEVEL1_ICACHE_ASSOC                8
@@ -78,9 +80,15 @@ LEVEL1_DCACHE_LINESIZE             64
 LEVEL2_CACHE_SIZE                  262144
 LEVEL2_CACHE_ASSOC                 4
 LEVEL2_CACHE_LINESIZE              64
-LEVEL3_CACHE_SIZE                  8388608
-LEVEL3_CACHE_ASSOC                 16
+LEVEL3_CACHE_SIZE                  3145728
+LEVEL3_CACHE_ASSOC                 12
 LEVEL3_CACHE_LINESIZE              64
+```
+
+On Linux machines, you can get this information from the following command:
+
+```bash
+getconf -a | grep CACHE
 ```
 
 ### Our benchmarks at the assembly level
@@ -97,6 +105,23 @@ Percent│
        │   ├──dec    %edx
   0.01 │   └──jne    68
 ```
+
+### Predicting Pathological Access Patterns
+
+Now that we understand the basics of cache associativity, and the platform we are working on, we can use some faily basic calculation to predict which accesss patterns will lead to bad performance. For this experiment, we will focus on the L1 cache, as it is the closest to the core, and easiest to predict the behavior of.
+
+Our L1 cache is 32 kB, which we can re-write as 2^15 B. Power-of-two exponents are much easier to deal with in these calculations. We also know that it is 8-way set associative. From there, we can figure out the size the each way in our cache. This can be done with a simple calculation of 2^15 B / 2^3 ways = 2^12 B/way.
+
+Ok, so we've found the B/way of our L1 cache. Why do we care? This also corresponds to the stride of our pathological access pattern! But how? More simple calculations to the rescue! Cache lines are mapped to sets in a cache. We can find the number of sets in our cache by doing some more division. We can find the number of sets in our cache by dividing the number of bytes in each way by the cache lines size (typically 64 B). These represents all of the "slots" to which a cache line can be mapped.
+
+For our values, we find that the number of sets in our cache is equal to 2^12 B/way / 2^6 B/cache line which gives us 2^6 (64) sets in our cache. So how do we interpret these results? Our addresses are first split into cache lines every 64 B. For example, addresses 0x0 -> 0x3f get mapped to cache lines 0, and address 0x40 -> 0x7f get mapped to cache line 1. These cache lines are in turn mapped to sets in our cache.
+
+For our L1 cache, the mapping is simple. If we have 64 sets in our cache, cache lines get mapped to these sets using a simple modulo operation (Cache Line # % # of sets). This means cache line 0 gets mapped to set 0, cache line 1 to set 1, and cache line 64 back to set 0. Because we have an 8-way set associative cache, there are 8 places for a cache line to go in each set. That means that if we happened to access cache lines 0, 64, 128, ..., 448 (eight cache lines each 64 cache lines apart), all 8 could fit into our L1 cache.
+
+Pathological access patterns for associativity depend on two parameters; the stride of the access pattern, and the number of cache lines accessed. If we do a non-power-of-two stride, our cache lines will be mapped across multiple sets. If we access too few cache lines, we will just experience hits in the cache. Luckily for us, we only need to extend our previous example slightly to experince the full failure of our L1 cache.
+
+If we take our stride of 64 cache lines (4096 B), but extend it from touching 8 cache lines to 16, we get approximately a 100% miss-rate in our cache. Let's think about why. If cache lines 0->448 (stride 64) took up all 8 ways in a single set, extending it to lines 0->960 (stride 64) will take up 16 places. Now, we will bring in the 8 cache lines into the L1, before immediately kicking them out to bring in the next 8. We can then repeat this pattern as many times as we like.
+
 
 ### Execution time results
 
