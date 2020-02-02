@@ -11,7 +11,7 @@ Optimizing applications requires us to understand the small details of our hardw
 
 ## Background
 
-Before we dig into our benchmarks, we must first talk about the structure of modern caches. Caches typically come in three varieties, each with their own set of pros and cons. While we could discuss, the organization and design tradeoffs of caches in length, we'll limit our discussion to only what is necessary to understand what we are measuring.
+Before we dig into our benchmarks, we must first talk about the structure of modern caches. Caches typically come in three varieties, each with their own set of pros and cons. While we could discuss the organization and design tradeoffs of caches in detail, I'll limit our discussion to only what is necessary to understand our benchmarks.
 
 ### Direct Mapped Caches
 
