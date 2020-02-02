@@ -31,6 +31,22 @@ Set-associative caches represent a comprimise between direct mapped, and fully a
 
 While a set-associative cache is good, there are still access patterns that can lead to poor performance. If we access cache lines that all happen to map to the same set, there are still on _M_ places to put them. This tends to happen with power of 2 stride access patterns. The mappings of cache blocks to sets is fairly simple. When we increase the power of two of our stride, the cache lines we access are mapped to fewer and fewer sets, leading to greater contention.
 
+### The Four Types of Cache Misses
+
+Cache misses are typically grouped into 4 categories:
+- Cold-start
+- Capacity
+- Coherence
+- Conflict
+
+Cold-start misses are intuitive. If we've never accessed a piece of data before, it's unlikely to be in our cache. However, hardware and software prefetching mechanisms help programmers avoid some of these misses.
+
+Capacity misses occur because the data we are accessing is simply larger than what will fit inside of our cache. If our cache is only 32kB, it's not going to be able to hold a 1GB array.
+
+Coherence misses are slightly more complicated, as they are the result of multiple threads writing data to the same cache lines. For more information about this, check out my previous blog post on false sharing.
+
+Conflict misses deal with the structure of our caches, and will be the primary subject of this post. Conflict misses occur even when there is unused space in the cache. The problem is that modern caches are set-associative. Cache lines may end up kicking each other out of the cache when they get mapped to the same set.
+
 ## Benchmarking and Profiling
 
 The following results were collected using [Google Benchmark](https://github.com/google/benchmark) and the [perf Linux profiler](https://perf.wiki.kernel.org/index.php/Main_Page). Each of our benchmarks follows the following form, and was compiled using:
@@ -116,56 +132,70 @@ Ok, so we've found the B/way of our L1 cache. Why do we care? This also correspo
 
 For our values, we find that the number of sets in our cache is equal to 2^12 B/way / 2^6 B/cache line which gives us 2^6 (64) sets in our cache. So how do we interpret these results? Our addresses are first split into cache lines every 64 B. For example, addresses 0x0 -> 0x3f get mapped to cache lines 0, and address 0x40 -> 0x7f get mapped to cache line 1. These cache lines are in turn mapped to sets in our cache.
 
-For our L1 cache, the mapping is simple. If we have 64 sets in our cache, cache lines get mapped to these sets using a simple modulo operation (Cache Line # % # of sets). This means cache line 0 gets mapped to set 0, cache line 1 to set 1, and cache line 64 back to set 0. Because we have an 8-way set associative cache, there are 8 places for a cache line to go in each set. That means that if we happened to access cache lines 0, 64, 128, ..., 448 (eight cache lines each 64 cache lines apart), all 8 could fit into our L1 cache.
+The mapping of addresses to sets in the L1 cache is simple. If we have 64 sets, cache lines get mapped to these sets using a simple modulo operation (Cache Line # % # of sets). This means cache line 0 gets mapped to set 0 (0 % 64), cache line 1 to set 1 (1 % 64), and cache line 64 back to set 0 (64 % 64). Because we have an 8-way set associative cache, there are 8 places for a cache line to go in each set. That means that if we happened to access cache lines 0, 64, 128, ..., 448 (eight cache lines with 64 cache lines in between each line), all 8 could fit into our L1 cache.
 
-Pathological access patterns for associativity depend on two parameters; the stride of the access pattern, and the number of cache lines accessed. If we do a non-power-of-two stride, our cache lines will be mapped across multiple sets. If we access too few cache lines, we will just experience hits in the cache. Luckily for us, we only need to extend our previous example slightly to experince the full failure of our L1 cache.
+Pathological access patterns for associativity depend on two parameters; the stride of the access pattern, and the number of cache lines accessed. If we do a non-power-of-two stride, our cache lines will be mapped across multiple sets. If we access too few cache lines, we will just experience hits in the cache. Luckily for us, we only need to extend our previous example slightly to render our L1 cache completely useless.
 
-If we take our stride of 64 cache lines (4096 B), but extend it from touching 8 cache lines to 16, we get approximately a 100% miss-rate in our cache. Let's think about why. If cache lines 0->448 (stride 64) took up all 8 ways in a single set, extending it to lines 0->960 (stride 64) will take up 16 places. Now, we will bring in the 8 cache lines into the L1, before immediately kicking them out to bring in the next 8. We can then repeat this pattern as many times as we like.
+If we keep our stride of 64 cache lines (4096 B), we can ensure each cache line we access is mapped to the same set in the L1 cache. If we double the number of cache lines we access from the previous example (16, instead of 8), we will be accessing twice as many cache lines as could fit into a single set of our cache. This means that we will bring the first 8 cache lines, then immediately kick them out when we access the next 8, and vice versa when we access the first 8 cache lines again. This should give use an approximately 100% miss-rate. 
 
+## Execution time and miss-rate results
 
-### Execution time results
-
-Execution time results for our four microbenchmarks can be found below.
-
-```
---------------------------------------------------------
-Benchmark              Time             CPU   Iterations
---------------------------------------------------------
-assocBench/0       0.907 ms        0.907 ms          779
-assocBench/1        1.05 ms         1.05 ms          672
-assocBench/2        1.60 ms         1.60 ms          430
-assocBench/3        3.24 ms         3.24 ms          215
-assocBench/4        6.42 ms         6.42 ms          107
-assocBench/5        8.91 ms         8.91 ms           74
-assocBench/6        10.0 ms         10.0 ms           69
-assocBench/7        11.6 ms         11.6 ms           60
-assocBench/8        12.2 ms         12.2 ms           58
-assocBench/9        16.1 ms         16.1 ms           43
-```
-As predicted, our execution time steadily increases as the stride increases.
-
-If we knew nothing about associativity, we may have predicted that our execution time would increase until 2^4, and stayed constant afterwards. At a stride of 2^4 (16) elements, each element we access belongs to a different cache line. This is also true for any power of two greater that 2^4. However, our execution time continues to increase. This is because the cache lines we access are mapped to fewer and fewer sets.
-
-### L1 cache hit rate
-
-Another statistic we can look at to confirm our increase in cache pressure is our cache miss-rate. Below are the miss-rates for each of the benchmarks:
+Let's first take a look at the case where we access only 8 cache lines that map to a single set.
 
 ```
-assocBench/0   L1-dcache-load-misses   #   6.28%  of all L1-dcache hits
-assocBench/1   L1-dcache-load-misses   #   12.53% of all L1-dcache hits
-assocBench/2   L1-dcache-load-misses   #   24.95% of all L1-dcache hits
-assocBench/3   L1-dcache-load-misses   #   48.89% of all L1-dcache hits
-assocBench/4   L1-dcache-load-misses   #   97.42% of all L1-dcache hits
-assocBench/5   L1-dcache-load-misses   #   95.35% of all L1-dcache hits
-assocBench/6   L1-dcache-load-misses   #   97.73% of all L1-dcache hits
-assocBench/7   L1-dcache-load-misses   #   96.70% of all L1-dcache hits
-assocBench/8   L1-dcache-load-misses   #   98.54% of all L1-dcache hits
-assocBench/9   L1-dcache-load-misses   #  172.16% of all L1-dcache hits
+------------------------------------------------------
+Benchmark            Time             CPU   Iterations
+------------------------------------------------------
+L1_Bench/13       1.52 ms         1.52 ms         2775
 ```
+
+We can't tell much with a single measurement, but we can still see if our prediction about having a 100% hit rate ended up being true.
+
+```
+4,081,018,718    L1-dcache-loads         693.978 M/sec
+733,294          L1-dcache-load-misses   0.02% of all L1-dcache hits
+
+```
+
+That is just about as close to 100% as we're ever going to get! Now we can take a look at increasing the length of our array by 2x. Now we're accessing 16 cache lines that all map to a single set.
+
+```
+------------------------------------------------------
+Benchmark            Time             CPU   Iterations
+------------------------------------------------------
+L1_Bench/14       4.19 ms         4.19 ms         1004
+```
+
+Our execution time increased by over 2x (from 1.53ms to 4.19ms)! Now let's look at our L1 cache hit rate.
+
+```
+1,173,287,652   L1-dcache-loads         249.982 M/sec
+1,328,613,357   L1-dcache-load-misses   113.24% of all L1-dcache hits
+```
+
+As expected, our L1 cache miss-rate went through the roof!
+
+For some fun, we can play around with our stride to make sure this is an associativity problem, not just a capacity one. Let's add a number like 17 to our stride, and see how the results differ.
+
+```
+Benchmark            Time             CPU   Iterations
+------------------------------------------------------
+L1_Bench/13       1.14 ms         1.14 ms          606
+L1_Bench/14       1.14 ms         1.14 ms          614
+L1_Bench/15       1.14 ms         1.14 ms          613
+L1_Bench/16       1.14 ms         1.14 ms          611
+L1_Bench/17       1.24 ms         1.24 ms          550
+L1_Bench/18       1.24 ms         1.24 ms          561
+L1_Bench/19       1.26 ms         1.26 ms          552
+L1_Bench/20       1.33 ms         1.33 ms          526
+L1_Bench/21       5.02 ms         5.02 ms          137
+```
+
+Notice how it takes us significantly longer to see any increase in execution time? This is because the cache lines we're accessing are mapped to more than one set! Eventually we see an increase in execution time, but we can attribute this to the L1 cache only being 32kB, and not being able to hold an entire multi-megabyte vector (capacity misses).
 
 ## Concluding remarks
 
-Understanding how your underlying hardware works is incredibly important when you're trying to squeeze performance out of your code. False sharing is an example of how an obvious solution to a problem (like using multiple atomic integers) may not be a solution. We'll cover more optimization case studies like this in later tutorials.
+If you care about your performance of your software, you should also care about what hardware that software is running on. Seemingly innocuous access patterns can lead to significant drops in performance.
 
 Thanks for reading,
 
@@ -173,11 +203,10 @@ Thanks for reading,
 
 ### Links to source and YouTube Tutorial
 
-- [Source Code](https://github.com/CoffeeBeforeArch/uarch_benchmarks/tree/master/false_sharing)
-- [YouTube Video](https://youtu.be/FygXDrRsaU8)
+- [Source Code](https://github.com/CoffeeBeforeArch/uarch_benchmarks/tree/master/associativity)
 
 ### Additional discussion points
 
-- Our benchmarks could be rewritten using atomic references that have been introduced in C++20. These provide an excellent way to have selective atomicity.
-- Real workloads typically do more that have 4 threads only compete for a single cache-line. However, there may be regions of execution where this pathological case exists, and still causes a significant performance impact.
-- Why do you need to use an atomic integer at all? [Here's](https://stackoverflow.com/a/39396999/12482128) a Stack Overflow response answering that question.
+- Where does this happen in reality?
+  - If you have a matrix with power-of-two elements in each row, a column major access pattern could lead to these conflict misses
+  - If you have an array of objects to update a field in each one, this could lead to these conflict misses.
