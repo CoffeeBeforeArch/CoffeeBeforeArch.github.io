@@ -6,6 +6,7 @@ The content I create reflects how I would have wanted to learn about programming
 
 ## Recent Posts
 [Tutorial on False Sharing]({% post_url 2019-12-28-false-sharing-tutorial %})
+
 [Tutorial on Cache Associativity]({% post_url 2020-01-12-cache-associativity %})
 
 ## Setup

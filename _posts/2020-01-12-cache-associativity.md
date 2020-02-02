@@ -208,5 +208,5 @@ Thanks for reading,
 ### Additional discussion points
 
 - Where does this happen in reality?
-  - If you have a matrix with power-of-two elements in each row, a column major access pattern could lead to these conflict misses
-  - If you have an array of objects to update a field in each one, this could lead to these conflict misses.
+  - A column major access pattern of a matrix
+  - Accessing fields in an array of objects
