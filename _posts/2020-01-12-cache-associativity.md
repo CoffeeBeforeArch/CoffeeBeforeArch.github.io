@@ -5,7 +5,7 @@ title: Cache Associativity
 
 # Cache Associativity
 
-Understanding why different access patterns lead to different performance results requires us to understand the underlying hardware of our processors. In this tutorial, we will be exploring the effects of cache associativity on performance using a simple power-of-two acceess pattern, and different sizes of arrays. A link to the source code used in this tutorial can be found here:
+Optimizing applications requires us to understand the small details of our hardware. Understanding the memory hierarchy is especially important. In this tutorial, we will be exploring the effects of cache associativity on performance using a simple power-of-two acceess pattern, and different sizes of arrays. A link to the source code used in this tutorial can be found here:
 
 - [Source Code](https://github.com/CoffeeBeforeArch/spring_2020_tutorial/tree/master/associativity)
 
