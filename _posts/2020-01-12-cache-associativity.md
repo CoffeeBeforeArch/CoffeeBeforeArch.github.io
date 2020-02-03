@@ -29,7 +29,7 @@ Set-associative caches represent a compromise between direct mapped and fully as
 
 ### Problematic Access Patterns for Set-Associative Caches
 
-While a set-associative cache is good, there are still access patterns that can lead to poor performance. If we access cache blocks that all happen to map to the same set, there are still on _M_ places to put them, even if the rest of our cache is empty. We tend to see problems with associativity when we have accesses in a stride length that is a power-of-two. This is because our cache sizes and associativity tend to also be powers of two. 
+While a set-associative cache is good, there are still access patterns that can lead to poor performance. If we access cache blocks that all happen to map to the same set, there are still on _M_ places to put them, even if the rest of our cache is empty. We tend to see problems with associativity when we have accesses in a stride length that is a power-of-two. This is because our cache sizes and associativity tend to also be powers of two. We'll look more closely as to why this happens with some calculations later on. 
 
 ### The Four Types of Cache Misses (The Four Cs)
 Before we continue our discussion on associativity, we should discuss how cache misses are classified. This is typically done in four categories:
