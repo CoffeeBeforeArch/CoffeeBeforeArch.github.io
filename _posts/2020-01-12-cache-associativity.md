@@ -31,7 +31,7 @@ Set-associative caches represent a compromise between direct mapped and fully as
 
 While a set-associative cache is good, there are still access patterns that can lead to poor performance. If we access cache blocks that all happen to map to the same set, there are still on _M_ places to put them, even if the rest of our cache is empty. We tend to see problems with associativity when we have accesses in a stride length that is a power-of-two. This is because our cache sizes and associativity tend to also be powers of two. 
 
-### The Four Types of Cache Misses
+### The Four Types of Cache Misses (The Four Cs)
 Before we continue our discussion on associativity, we should discuss how cache misses are classified. This is typically done in four categories:
 
 - Cold-start
@@ -166,7 +166,6 @@ We can't tell much with a single measurement, but we can still see if our predic
 ```
 4,081,018,718    L1-dcache-loads         693.978 M/sec
 733,294          L1-dcache-load-misses   0.02% of all L1-dcache hits
-
 ```
 
 That is just about as close to 100% as we're ever going to get!
@@ -268,6 +267,6 @@ Thanks for reading,
 
 --Nick
 
-### Links to Source Code
+### Links
 
-- [Source Code](https://github.com/CoffeeBeforeArch/spring_2020_tutorial/tree/master/associativity)
+[Source Code](https://github.com/CoffeeBeforeArch/spring_2020_tutorial/tree/master/associativity)
