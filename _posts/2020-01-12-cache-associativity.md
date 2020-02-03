@@ -131,13 +131,20 @@ Ok, so we've found the B/way of our L1 cache. Why do we care? This also correspo
 
 For our processor, the number of sets is equal to 2^12 / 2^6 which gives us 2^6 (64) sets in our cache. So how do we interpret these results? Our addresses are first split into cache blocks every 64B. For example, addresses 0x0 -> 0x3f get mapped to cache block 0, and address 0x40 -> 0x7f get mapped to cache block 1. These cache blcok are then mapped to a set.
 
-The mapping of addresses to sets in the L1 cache is simple. We can find which set a cache block is mapped do by taking the cache block number and doing the modulo by the number of sets (Cache block # % # of sets). For example, cache block 0 gets mapped to set 0 (0 % 64), cache block 1 to set 1 (1 % 64), and cache block 64 back to set 0 (64 % 64). Because I have an 8-way set associative L1 cache in my processor, there are 8 places for a cache block to go in each set. If we accessed cache block numbers 0, 64, 128, ..., 448 (eight cache blocks with 64 cache blocks between each one), all 8 could fit into our L1 cache.
+The mapping of addresses to sets in the L1 cache is simple. We can find which set a cache block is mapped do by taking the cache block number and doing the modulo by the number of sets (Cache block # % # of sets). For example, cache block 0 gets mapped to set 0 (0 % 64), cache block 1 to set 1 (1 % 64), and cache block 64 back to set 0 (64 % 64). Because I have an 8-way set associative L1 cache in my processor, there are 8 places for a cache block to go in each set. If we accessed cache block numbers 0, 64, 128, ..., 448 (eight cache blocks with 64 cache blocks between each one), all 8 could fit into a single set of our cache.
 
-Pathological access patterns for associativity depend on two parameters; the stride of the access pattern, and the number of cache lines accessed. If we do a non-power-of-two stride, our cache lines will be mapped across multiple sets. If we access too few cache lines, we will just experience hits in the cache. Luckily for us, we only need to extend our previous example slightly to render our L1 cache completely useless.
+Pathological access patterns for associativity depend on two parameters; the stride of the accesses, and the number of cache lines accessed. If we do a non-power-of-two stride, our cache blocks will be mapped across multiple sets. If we access too few cache blocks, there won't be enough contention. Luckily for us, we only need to extend our previous access pattern example slightly to show how the L1 cache can be rendered completely ineffective.
 
-If we keep our stride of 64 cache lines (4096 B), we can ensure each cache line we access is mapped to the same set in the L1 cache. If we double the number of cache lines we access from the previous example (16, instead of 8), we will be accessing twice as many cache lines as could fit into a single set of our cache. This means that we will bring the first 8 cache lines, then immediately kick them out when we access the next 8, and vice versa when we access the first 8 cache lines again. This should give use an approximately 100% miss-rate. 
+If we keep our stride of 64 cache blocks (4096 B), we can ensure each cache block we access is mapped to the same set in the L1 cache. If we double the number of cache blocks we access from the previous example (16, instead of 8), we will be accessing twice as many cache blocks as could fit into a single set of our cache. This means that we will bring the first 8 cache lines, then immediately kick them out when we access the next 8, and vice versa when we access the first 8 cache blocks again. This should give use an approximately 100% miss-rate. 
 
-## Execution time and miss-rate results
+## Execution Time and Miss-Rate Results
+
+In this section we'll look at some execution time and miss-rate numbers. These will be used to prove out our calculations from the previous section.
+
+### Notes on the benchmark
+Note, our benchmarks use integers (4B) instead of characters (1B). This is because we often work with larger data types (ints, floats, doubles), so I wanted to provide a more realistic example. As result, we just have to convert things like our stride from 4096B to 1024 integers.
+
+### No Contention (~100% Hit-Rate)
 
 Let's first take a look at the case where we access only 8 cache lines that map to a single set.
 
@@ -156,7 +163,11 @@ We can't tell much with a single measurement, but we can still see if our predic
 
 ```
 
-That is just about as close to 100% as we're ever going to get! Now we can take a look at increasing the length of our array by 2x. Now we're accessing 16 cache lines that all map to a single set.
+That is just about as close to 100% as we're ever going to get!
+
+### Full Contention (~100% Miss-Rate)
+
+Now we can take a look at increasing the length of our array by 2x. Now we're accessing 16 cache lines that all map to a single set.
 
 ```
 ------------------------------------------------------
@@ -173,6 +184,8 @@ Our execution time increased by over 2x (from 1.53ms to 4.19ms)! Now let's look 
 ```
 
 As expected, our L1 cache miss-rate went through the roof!
+
+### A Non-Power-of-Two Stride
 
 For some fun, we can play around with our stride to make sure this is an associativity problem, not just a capacity one. Let's add a number like 17 to our stride, and see how the results differ.
 
