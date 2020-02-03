@@ -17,7 +17,7 @@ Before we dig into our benchmarks, we must first talk about the structure of mod
 
 Direct mapped caches are the most basic form a cache. In a direct mapped cache, each cache block has single location where it can be stored. That means that when we look up an address in our cache, we only need to check a single location. Furthermore, replacing cache blocks is simple. If we load cache block _B_, and cache block _A_, is mapped to the same location and already in that slot, we simply kick _A_ out the cache.
 
-However, this simplicity has some significant disadvantages in terms of performance. If we repeatadly access cache lines that are mapped to the same location, we end up kicking out data we will access in the near future. These pathological access patterns are common enough where we don't see direct mapped caches anymore in the memory hierarchy.
+However, this simplicity has some significant disadvantages in terms of performance. If we repeatadly access cache blocks that are mapped to the same location, we end up kicking out data we will access in the near future. These pathological access patterns are common enough where we don't see direct mapped caches anymore in the memory hierarchy.
 
 ### Fully Associative Caches
 
@@ -43,9 +43,9 @@ Cold-start misses are intuitive. If we've never accessed a piece of data before,
 
 Capacity misses occur because the data we are accessing is simply larger than what will fit inside of our cache. If our cache is only 32KB, it's not going to be able to hold a 1GB array.
 
-Coherence misses are slightly more complicated, as they are the result of multiple threads writing data to the same cache lines. For more information about this, check out my [previous blog post](https://coffeebeforearch.github.io/2019/12/28/false-sharing-tutorial.html) on false sharing.
+Coherence misses are slightly more complicated, as they are the result of multiple threads writing data to the same cache blocks. For more information about this, check out my [previous blog post](https://coffeebeforearch.github.io/2019/12/28/false-sharing-tutorial.html) on false sharing.
 
-Conflict misses deal with the structure of our caches, and will be the primary subject of this blog post. Conflict misses can occur even when the majority of our cache is empty. The problem is that modern caches are set-associative. If we access too many cache lines that are mapped to the same set, they end up kicking each other out.
+Conflict misses deal with the structure of our caches, and will be the primary subject of this blog post. Conflict misses can occur even when the majority of our cache is empty. The problem is that modern caches are set-associative. If we access too many cache blocks that are mapped to the same set, they end up kicking each other out.
 
 ## Benchmarking and Profiling
 
@@ -106,7 +106,7 @@ On Linux machines, you can get this information with the following command:
 getconf -a | grep CACHE
 ```
 
-### Our benchmarks at the assembly level
+### Our Benchmarks at the Assembly Level
 
 Before we take a look at the results, it's important to understand what our code is doing at the lowest level. The following pieces of assembly were taken from perf reports, where the column labled "Percent" corresponds to where the profiler is saying our program is spending most time. As the only operation we are doing is incrementing integers along a stride, our memory access takes most of the time.
 
@@ -127,26 +127,32 @@ Now that we understand the basics of cache associativity, and the platform we ar
 
 Our L1 cache is 32KB, which we can re-write as 2^15B. Power-of-two exponents are much easier to deal with in these calculations. We also know that it is 8-way set associative (2^3 ways). From there, we can figure out the size the each way in our cache, which is 2^15B / 2^3 ways = 2^12B/way.
 
-Ok, so we've found the B/way of our L1 cache. Why do we care? This also corresponds to the stride of our pathological access pattern! But how? More simple calculations to the rescue! Cache blocks are mapped to sets in a cache.  A set are just group of _M_ ways where a cache line can sit. We can find the number of sets in our cache by doing some more division. The number of sets is the number of bytes per way divided by the cache block size (typically 64B).
+Ok, so we've found the B/way of our L1 cache. Why do we care? This also corresponds to the stride of our pathological access pattern! But how? More simple calculations to the rescue! Cache blocks are mapped to sets in a cache.  A set are just group of _M_ ways where a cache block can sit. We can find the number of sets in our cache by doing some more division. The number of sets is the number of bytes per way divided by the cache block size (typically 64B).
 
 For our processor, the number of sets is equal to 2^12 / 2^6 which gives us 2^6 (64) sets in our cache. So how do we interpret these results? Our addresses are first split into cache blocks every 64B. For example, addresses 0x0 -> 0x3f get mapped to cache block 0, and address 0x40 -> 0x7f get mapped to cache block 1. These cache blcok are then mapped to a set.
 
 The mapping of addresses to sets in the L1 cache is simple. We can find which set a cache block is mapped do by taking the cache block number and doing the modulo by the number of sets (Cache block # % # of sets). For example, cache block 0 gets mapped to set 0 (0 % 64), cache block 1 to set 1 (1 % 64), and cache block 64 back to set 0 (64 % 64). Because I have an 8-way set associative L1 cache in my processor, there are 8 places for a cache block to go in each set. If we accessed cache block numbers 0, 64, 128, ..., 448 (eight cache blocks with 64 cache blocks between each one), all 8 could fit into a single set of our cache.
 
-Pathological access patterns for associativity depend on two parameters; the stride of the accesses, and the number of cache lines accessed. If we do a non-power-of-two stride, our cache blocks will be mapped across multiple sets. If we access too few cache blocks, there won't be enough contention. Luckily for us, we only need to extend our previous access pattern example slightly to show how the L1 cache can be rendered completely ineffective.
+Pathological access patterns for associativity depend on two parameters; the stride of the accesses, and the number of cache blocks accessed. If we do a non-power-of-two stride, our cache blocks will be mapped across multiple sets. If we access too few cache blocks, there won't be enough contention. Luckily for us, we only need to extend our previous access pattern example slightly to show how the L1 cache can be rendered completely ineffective.
 
-If we keep our stride of 64 cache blocks (4096 B), we can ensure each cache block we access is mapped to the same set in the L1 cache. If we double the number of cache blocks we access from the previous example (16, instead of 8), we will be accessing twice as many cache blocks as could fit into a single set of our cache. This means that we will bring the first 8 cache lines, then immediately kick them out when we access the next 8, and vice versa when we access the first 8 cache blocks again. This should give use an approximately 100% miss-rate. 
+If we keep our stride of 64 cache blocks (4096B), we can ensure each cache block we access is mapped to the same set in the L1 cache. If we double the number of cache blocks we access from the previous example (16, instead of 8), we will be accessing twice as many cache blocks as could fit into a single set of our cache. This means that we will bring the first 8 cache blocks, then immediately kick them out when we access the next 8, and vice versa when we access the first 8 cache blocks again. This should give use an approximately 100% miss-rate. 
 
 ## Execution Time and Miss-Rate Results
 
 In this section we'll look at some execution time and miss-rate numbers. These will be used to prove out our calculations from the previous section.
 
 ### Notes on the benchmark
-Note, our benchmarks use integers (4B) instead of characters (1B). This is because we often work with larger data types (ints, floats, doubles), so I wanted to provide a more realistic example. As result, we just have to convert things like our stride from 4096B to 1024 integers.
+Note, our benchmarks use integers (4B) instead of characters (1B). This is because we often work with larger data types (ints, floats, doubles), so I wanted to provide a more realistic example. As a result, we must convert things, like our stride, from 4096B to 1024 integers. Furthermore, when you see the benchmark output:
+
+```
+L1_Bench/13 ...
+```
+
+The number 13 corresponds to the power-of-two number of integers in the array (2^13 = 8192 integers = 32kB). We will be using our calculated problematic stride (4096B = 1024 integers). An interesting aspect of this benchmark you can also explore is the impact of different power-of-two strides. For the sake of brevity, that data is omitted from this post. 
 
 ### No Contention (~100% Hit-Rate)
 
-Let's first take a look at the case where we access only 8 cache lines that map to a single set.
+Let's first take a look at the case where we access only 8 cache blocks that map to a single set.
 
 ```
 ------------------------------------------------------
@@ -167,7 +173,7 @@ That is just about as close to 100% as we're ever going to get!
 
 ### Full Contention (~100% Miss-Rate)
 
-Now we can take a look at increasing the length of our array by 2x. Now we're accessing 16 cache lines that all map to a single set.
+Now we can take a look at increasing the length of our array by 2x. Now we're accessing 16 cache blocks that all map to a single set.
 
 ```
 ------------------------------------------------------
@@ -211,7 +217,7 @@ L1_Bench/20       1.33 ms         1.33 ms          526
 L1_Bench/21       5.02 ms         5.02 ms          137
 ```
 
-Notice how it takes us significantly longer to see any increase in execution time? This is because the cache lines we're accessing are mapped to more than one set! Eventually we see an increase in execution time, but we can attribute this to the L1 cache only being 32kB, and not being able to hold an entire multi-megabyte vector (capacity misses).
+Notice how it takes us significantly longer to see any increase in execution time? This is because the cache blocks we're accessing are mapped to more than one set! Eventually we see an increase in execution time, but we can attribute this to the L1 cache only being 32kB, and not being able to hold an entire multi-megabyte vector (capacity misses).
 
 ### Beyond the L1 Cache
 We know that our L2 and L3 caches are set-associative as well. Let's take a look at some results from a slightly different benchmark, where we increase out stride to 512kB:
@@ -256,18 +262,12 @@ A huge difference in performance! Even at our largest array that we iterate over
 
 ## Concluding remarks
 
-If you care about your performance of your software, you should also care about what hardware that software is running on. Seemingly innocuous access patterns can lead to significant drops in performance.
+If you care about your performance of your software, you should also care about what hardware that software is running on. Seemingly innocuous access patterns can lead to significant drops in performance when they stress things like the organization of our caches. While we intentionally exposed the limitations of our cache associativity through microbenchmarks, this can also happen in real-world applications. Examples of this would be column-major accesses of a matrix with a power-of-two dimension, or striding through an array of objects, updating a fields that are a power-of-two number of bytes away from each other.
 
 Thanks for reading,
 
 --Nick
 
-### Links to source and YouTube Tutorial
+### Links to Source Code
 
-- [Source Code](https://github.com/CoffeeBeforeArch/uarch_benchmarks/tree/master/associativity)
-
-### Additional discussion points
-
-- Where does this happen in reality?
-  - A column major access pattern of a matrix
-  - Accessing fields in an array of objects
+- [Source Code](https://github.com/CoffeeBeforeArch/spring_2020_tutorial/tree/master/associativity)
