@@ -220,7 +220,7 @@ L1_Bench/21       5.02 ms         5.02 ms          137
 Notice how it takes us significantly longer to see any increase in execution time? This is because the cache blocks we're accessing are mapped to more than one set! Eventually we see an increase in execution time, but we can attribute this to the L1 cache only being 32kB, and not being able to hold an entire multi-megabyte vector (capacity misses).
 
 ### Beyond the L1 Cache
-We know that our L2 and L3 caches are set-associative as well. Let's take a look at some results from a slightly different benchmark, where we increase out stride to 512kB:
+We know that our L2 and L3 caches are set-associative as well. Let's take a look at some results from a slightly different benchmark where we increase our stride to 512kB:
 
 ```
 -------------------------------------------------------
@@ -239,7 +239,7 @@ LLC_Bench/29       38.7 ms         38.7 ms           17
 LLC_Bench/30       45.2 ms         45.2 ms           13
 ```
 
-Unsurprisingly the execution time keeps increasing, as we get more conflict misses at other levels of the cache hierarchy. As a comparison, let's to the same test as we did with the L1 cache, where we add 17 to the stride. Here are the results:
+Unsurprisingly the execution time increases as we get more conflict misses at lower levels of the cache hierarchy. For comparison, let's do the same test we did with the L1 cache, where we add 17 to the stride. Here are the results:
 
 ```
 -------------------------------------------------------
@@ -258,7 +258,7 @@ LLC_Bench/29       15.9 ms         15.9 ms           47
 LLC_Bench/30       21.9 ms         21.6 ms           35
 ```
 
-A huge difference in performance! Even at our largest array that we iterate over (2^30 integers), we're still 2x faster than the power of two stride! Many of the misses we see in this case are capacity instead of conflict misses.
+A huge difference in performance! Even at our largest array that we iterate over (2^30 integers), we're still 2x faster than the power of two stride! Many of the misses we see in this case are capacity, rather than conflict misses.
 
 ## Concluding remarks
 
