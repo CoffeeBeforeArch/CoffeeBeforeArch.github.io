@@ -111,7 +111,7 @@ getconf -a | grep CACHE
 Before we take a look at the results, it's important to understand what our code is doing at the lowest level. The following pieces of assembly were taken from perf reports, where the column labled "Percent" corresponds to where the profiler is saying our program is spending most time. As the only operation we are doing is incrementing integers along a stride, our memory access takes most of the time.
 
 ```assembly
-Percent│
+Percent│const int step = 1 << 10;
   8.76 │68:┌─→ movslq %eax,%rcx
   0.04 │   │  add    0x400,%eax
  90.77 │   │  incl   0x0(%rbp,%rcx,4)
@@ -189,6 +189,14 @@ As expected, our L1 cache miss-rate went through the roof!
 
 For some fun, we can play around with our stride to make sure this is an associativity problem, not just a capacity one. Let's add a number like 17 to our stride, and see how the results differ.
 
+Our only change to the benchmark:
+
+```cpp
+const int step = (1 << 10) + 17;
+```
+
+The benchmark results:
+
 ```
 Benchmark            Time             CPU   Iterations
 ------------------------------------------------------
@@ -204,6 +212,47 @@ L1_Bench/21       5.02 ms         5.02 ms          137
 ```
 
 Notice how it takes us significantly longer to see any increase in execution time? This is because the cache lines we're accessing are mapped to more than one set! Eventually we see an increase in execution time, but we can attribute this to the L1 cache only being 32kB, and not being able to hold an entire multi-megabyte vector (capacity misses).
+
+### Beyond the L1 Cache
+We know that our L2 and L3 caches are set-associative as well. Let's take a look at some results from a slightly different benchmark, where we increase out stride to 512kB:
+
+```
+-------------------------------------------------------
+Benchmark             Time             CPU   Iterations
+-------------------------------------------------------
+LLC_Bench/20       1.76 ms         1.76 ms          397
+LLC_Bench/21       4.45 ms         4.44 ms          159
+LLC_Bench/22       5.05 ms         5.05 ms          139
+LLC_Bench/23       5.94 ms         5.93 ms          116
+LLC_Bench/24       5.75 ms         5.75 ms          124
+LLC_Bench/25       5.84 ms         5.83 ms          120
+LLC_Bench/26       6.93 ms         6.92 ms           83
+LLC_Bench/27       11.6 ms         11.6 ms           54
+LLC_Bench/28       23.9 ms         23.9 ms           30
+LLC_Bench/29       38.7 ms         38.7 ms           17
+LLC_Bench/30       45.2 ms         45.2 ms           13
+```
+
+Unsurprisingly the execution time keeps increasing, as we get more conflict misses at other levels of the cache hierarchy. As a comparison, let's to the same test as we did with the L1 cache, where we add 17 to the stride. Here are the results:
+
+```
+-------------------------------------------------------
+Benchmark             Time             CPU   Iterations
+-------------------------------------------------------
+LLC_Bench/20       1.28 ms         1.27 ms          552
+LLC_Bench/21       1.32 ms         1.32 ms          513
+LLC_Bench/22       1.32 ms         1.32 ms          527
+LLC_Bench/23       1.34 ms         1.34 ms          531
+LLC_Bench/24       1.35 ms         1.34 ms          524
+LLC_Bench/25       1.37 ms         1.37 ms          515
+LLC_Bench/26       1.51 ms         1.51 ms          465
+LLC_Bench/27       1.70 ms         1.70 ms          427
+LLC_Bench/28       13.3 ms         13.3 ms           52
+LLC_Bench/29       15.9 ms         15.9 ms           47
+LLC_Bench/30       21.9 ms         21.6 ms           35
+```
+
+A huge difference in performance! Even at our largest array that we iterate over (2^30 integers), we're still 2x faster than the power of two stride! Many of the misses we see in this case are capacity instead of conflict misses.
 
 ## Concluding remarks
 
