@@ -5,13 +5,13 @@ title: Cache Associativity
 
 # Cache Associativity
 
-Optimizing applications requires us to understand the small details of our hardware. Understanding the memory hierarchy is especially important. In this tutorial, we will be exploring the effects of cache associativity on performance using a simple power-of-two acceess pattern, and different sizes of arrays. A link to the source code used in this tutorial can be found here:
+Optimizing applications requires us to understand our hardware. Understanding the memory hierarchy is especially important. In this tutorial we will explore the effects of cache associativity on performance using a simple power-of-two access pattern, and different sizes of arrays. A link to the source code used in this tutorial can be found here:
 
 - [Source Code](https://github.com/CoffeeBeforeArch/spring_2020_tutorial/tree/master/associativity)
 
 ## Background
 
-Before we dig into our benchmarks, we must first talk about the structure of modern caches. Caches typically come in three varieties, each with their own set of pros and cons. While we could discuss the organization and design tradeoffs of caches in detail, I'll limit our discussion to only what is necessary to understand our benchmarks.
+Before we dig into our benchmarks, we must first talk about the structure of modern caches. Caches typically come in three varieties, each with their own set of pros and cons. While we could discuss the organization and design tradeoffs of caches in detail, we'll focus only on what is necessary to understand our benchmarks.
 
 ### Direct Mapped Caches
 
@@ -257,7 +257,7 @@ LLC_Bench/29       15.9 ms         15.9 ms           47
 LLC_Bench/30       21.9 ms         21.6 ms           35
 ```
 
-A huge difference in performance! Even at our largest array that we iterate over (2^30 integers), we're still 2x faster than the power of two stride! Many of the misses we see in this case are capacity, rather than conflict misses.
+A huge difference in performance! Even at our largest array that we iterate over (2^30 integers), we're still 2x faster than the power of two stride! Many of the misses we see in this case are capacity misses.
 
 ## Concluding remarks
 
