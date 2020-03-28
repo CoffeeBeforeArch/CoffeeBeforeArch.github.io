@@ -9,6 +9,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 [Tutorial on Cache Associativity]({% post_url 2020-01-12-cache-associativity %})
 
+[False Sharing Detection with Perf C2C]({% post_url 2020-03-27-perf-c2c %})
+
 ## Setup
 
 A few people have been curious about my software/hardware setup. I've therefore provided a list of these things below, with a brief rational behind the choices.
