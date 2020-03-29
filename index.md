@@ -11,6 +11,10 @@ The content I create reflects how I would have wanted to learn about programming
 
 [False Sharing Detection with Perf C2C]({% post_url 2020-03-27-perf-c2c %})
 
+## GPGPU-Sim Tutorials
+
+- [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
+
 ## Setup
 
 A few people have been curious about my software/hardware setup. I've therefore provided a list of these things below, with a brief rational behind the choices.
