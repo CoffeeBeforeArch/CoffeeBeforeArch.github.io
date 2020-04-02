@@ -268,7 +268,7 @@ Cheers,
 
 - Different applications may stress different parts of the simulator code. This would be an interesting thing to study in greater detail.
 
-- The impact on these performance changes will likely change from system to system. Understanding why is can be an interesting but challenging exercise.
+- The impact on these performance changes will likely change from system to system. Understanding why can be an interesting but challenging exercise.
 
 - Performance regressions are your friend! Tracking how code updates impact runtimes can help your code base from running at the speed of a turtle. 
 
