@@ -203,7 +203,7 @@ Let's modify the code for the `cache_stats::operator()` to the following.
   }
 ```
 
-All we have done is remove all the branches associated with the asserts (and the asserts themselves). Let's re-run our application and examine how the disassembly looks for our function that's the hotspot 
+All we have done is remove all the branches associated with the asserts (and the asserts themselves). Let's re-run our application and examine how the disassembly looks for our function that's the hotspot. 
 
 ```asm
 cache_stats::operator()  /home/cba/forked_repos/gpgpu-sim_distribution/lib/gcc-6.5.0/cuda-9010/release/libcudart.so
@@ -251,7 +251,7 @@ Percent│                                                                      
 
 ```
 
-The key things to take away from here is that we've removed a lot of the small overheads from extra branches and function calls, and primarily left with the overhead of caches misses. So, how well did we do? Let's just use the simulation time reported by the simulator for a rough estimate. On my machine, and for this relatively small input, my execution time went from 71 seconds to 61 seconds (a ~14% reduction in execution time). End-to-end execution time for the suite of applications used to qualify pull requests to the GPGPU-Sim repository decreased from 1h 34m to 1h 9m (with some minor variation from build to build).
+The key things to take away from here is that we've removed a lot of the small overheads from extra branches and function calls, and we're left (for the most part) just with the overhead of caches misses. So, how well did we do? Let's just use the simulation time reported by the simulator for a rough estimate. On my machine, and for this relatively small input, my execution time went from 71 seconds to 61 seconds (a ~14% reduction in execution time). End-to-end execution time for the suite of applications used to qualify pull requests to the GPGPU-Sim repository decreased from 1h 34m to 1h 9m (with some minor variation from build to build).
 
 
 ## Concluding Remarks
