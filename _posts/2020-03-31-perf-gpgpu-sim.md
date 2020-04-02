@@ -20,11 +20,11 @@ For information on building GPGPU-Sim, check out the [first post](https://coffee
 
 ## Our Configuration
 
-For this blog post we will be running a simple version of [CUDA matrix multiplication](https://github.com/CoffeeBeforeArch/cuda_programming/blob/master/matrixMul/baseline/mmul.cu) on GPGPU-Sim configured as an NVIDIA TITAN V GPU. This is the same setup as found [here](https://coffeebeforearch.github.io/2020/03/30/gpgpu-sim-1.html).
+For this blog post we will be running a simple version of [CUDA matrix multiplication](https://github.com/CoffeeBeforeArch/cuda_programming/blob/master/matrixMul/baseline/mmul.cu) on GPGPU-Sim configured as an NVIDIA TITAN V GPU. This is the same setup as the blog post [here](https://coffeebeforearch.github.io/2020/03/30/gpgpu-sim-1.html).
 
 ## Finding Application Hot Spots
 
-Optimizing for the common case is a core tenent of both high performance programming and computer architecture. But what exactly does that mean in the context of improving the performance of a simulator? For us, this means finding where the simulator is taking the longest, and improving performance there first. This is where Linux perf tools can help.
+Optimizing for the common case is a core tenant of both high performance programming and computer architecture. But what exactly does that mean in the context of improving the performance of a simulator? For us, this means finding where the simulator is spending most of its time, and improving performance there first. This is where Linux perf tools can help.
 
 Let's run our application with the simulator with a relatively small input (N = 128). Remember, using too large of matrix dimension will lead to a simulation that will not complete for hours. Here is a partial breakdown from where my run spent its time.
 
@@ -93,7 +93,7 @@ bool cache_stats::check_fail_valid(int type, int fail) const {
 }
 ```
 
-Turns out, it doesn't. But that's ok. The first step in writing code is often getting a functional, rathe than performant solution. Now that we understand what is taking so much time, let's look at the disassembly to see if it's a specific part of the function that's slow.
+Things did not get better. But that's ok. The first step in writing code is often to get a functional, rather than performant solution. Now that we understand what is taking so much time, let's look at the disassembly to see if it's a specific part of the function that's slow.
 
 ```asm
 cache_stats::operator()  /home/cba/forked_repos/gpgpu-sim_distribution/lib/gcc-6.5.0/cuda-9010/release/libcudart.so
@@ -187,7 +187,7 @@ Percent│                                                                      
 
 What are the key things to take away from this disassembly? For one thing, most of the time is being spent on the return of a value from either `m_stats` or `m_fail_stats`. This indicates that we are probably missing in the cache on these accesses. Another key take away is that we seem to have a lot of small chunks of time being spent on calling `check_valid(...)` and `check_fail_valid(...)` functions and the related jumps.
 
-If we wanted to tackle the cache misses, we'd have to dig deeper into things like reuse distance, locality, and where we might add some software prefetching. While this is a legitimate route to go, we might get an easy when by trying to simplify the control flow. I'm going to focus on simplifying the control flow because I see a glaring opportunity.
+If we wanted to tackle the cache misses, we'd have to dig deeper into things like reuse distance, locality, and where we might add some software prefetching. While this is a legitimate route to go, we might get an easy win by trying to simplify the control flow. I'm going to focus on simplifying the control flow because I see a glaring opportunity.
 
 The glaring opportunity comes from the fact I see assert statements in the code. If the simulator crashes, that indicates a serious problem (either because the architecture is not being modeled properly, or a feature has not been implemented yet. However, the simulator does not crash for a large number of applications, especially those typically simulated in research works. This means that almost every time the simulator runs, it is wasting time performing these checks.
 
@@ -258,9 +258,19 @@ The key things to take away from here is that we've removed a lot of the small o
 
 Performance tuning is feedback based. You measure, analyze, tune, and repeat. In later posts we'll discuss different performance tuning opportunities for code bases like GPGPU-Sim, and show off to use some more exciting tools. Until then, we'll settle for our ~14% increase in perf. Not bad for removing 4 lines of code.
 
+As always, feel free to contact me with questions.
+
 Cheers,
 
 --Nick
+
+## Discussion Points
+
+- Different applications may stress different parts of the simulator code. This would be an interesting thing to study in greater detail.
+
+- The impact on these performance changes will likely change from system to system. Understanding why is can be an interesting but challenging exercise.
+
+- Performance regressions are your friend! Tracking how code updates impact runtimes can help your code base from running at the speed of a turtle. 
 
 ## Links
 
