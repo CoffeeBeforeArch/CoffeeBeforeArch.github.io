@@ -11,6 +11,7 @@ The content I create reflects how I would have wanted to learn about programming
 
 [False Sharing Detection with Perf C2C]({% post_url 2020-03-27-perf-c2c %})
 
+[Improving GPGPU-Sim Performance]({% post_url 2020-03-31-perf-gpgpu-sim %})
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})

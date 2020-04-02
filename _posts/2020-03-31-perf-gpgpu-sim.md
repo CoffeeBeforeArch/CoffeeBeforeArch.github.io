@@ -1,9 +1,9 @@
 ---
 layout: default
-title: Optimizing the Common Case with GPGPU-Sim
+title: Improving GPGPU-Sim Performance
 ---
 
-# Optimizing the Common Case with GPGPU-Sim
+# Improving GPGPU-Sim Performance
 
 In a number of videos on my YouTube I have discussed performance tuning and benchmarking. However, the majority of those videos focus on microbenchmarks. In this post we'll be looking at how we can do some performance tuning on the GPGPU microarchitecture simulator GPGPU-Sim. Simulator performance is crucial, as it is the bottleneck for testing and verifying research ideas.
 
