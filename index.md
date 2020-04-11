@@ -5,13 +5,16 @@ Hey everyone I'm Nick, and welcome to the CoffeeBeforeArch GitHub page! I'm crea
 The content I create reflects how I would have wanted to learn about programming, optimization, and architecture. Hopefully it helps others that are teaching themselves about computer science like I did.
 
 ## Recent Posts
-[Tutorial on False Sharing]({% post_url 2019-12-28-false-sharing-tutorial %})
+- [Tutorial on False Sharing]({% post_url 2019-12-28-false-sharing-tutorial %})
 
-[Tutorial on Cache Associativity]({% post_url 2020-01-12-cache-associativity %})
+- [Tutorial on Cache Associativity]({% post_url 2020-01-12-cache-associativity %})
 
-[False Sharing Detection with Perf C2C]({% post_url 2020-03-27-perf-c2c %})
+- [False Sharing Detection with Perf C2C]({% post_url 2020-03-27-perf-c2c %})
 
-[Improving GPGPU-Sim Performance]({% post_url 2020-03-31-perf-gpgpu-sim %})
+- [Improving GPGPU-Sim Performance]({% post_url 2020-03-31-perf-gpgpu-sim %})
+
+- [Disabling Asserts]({% post_url 2020-04-11-asserts %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
