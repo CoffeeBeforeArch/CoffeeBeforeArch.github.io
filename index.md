@@ -15,6 +15,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Disabling Asserts]({% post_url 2020-04-11-asserts %})
 
+- [Aliasing]({% post_url 2020-04-12-aliasing %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
