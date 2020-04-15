@@ -21,6 +21,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
 
+- [Adding Configuration Options]({% post_url 2020-04-13-gpgpu-sim-2 %})
+
 ## Setup
 
 A few people have been curious about my software/hardware setup. I've therefore provided a list of these things below, with a brief rational behind the choices.
