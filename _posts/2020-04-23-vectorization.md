@@ -107,7 +107,7 @@ It looks like the compiler was able to do some auto-vectorization for us! Withou
 
 ## A Modern C++ Dot Product
 
-Modern C++ has a number of useful features can enable faster and more expressive code. The algorithms in the STL (standard template library) are examples of this. Let's update the following code to use both the STL and execution policies that are part of the Parallelism TS.
+Modern C++ has a number of useful features that can lead to faster and more expressive code. The algorithms in the STL (standard template library) are examples of this. Let's update the following code to use both the STL and execution policies that are part of the Parallelism TS.
 
 ```cpp
 // Modern C++ dot product
