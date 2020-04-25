@@ -1,9 +1,9 @@
 ---
 layout: default
-title: Vectorization and Programmability
+title: Vectorization
 ---
 
-# Vectorization and Programmability
+# Vectorization
 
 The majority of arithmetic hardware in modern processors is for vector instructions. This means that if we want to make effective use of our silicon, we need to manually vectorize our programs or get some help from the compiler. In this blog post, we'll be taking a look at the vectorization of a dot product, and be focusing on programmability, readability, and performance.
 
@@ -11,8 +11,43 @@ The majority of arithmetic hardware in modern processors is for vector instructi
 
 - [My YouTube Channel](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
 - [My GitHub Account](https://github.com/CoffeeBeforeArch)
-- [Dot product benchmarks](https://github.com/CoffeeBeforeArch/misc_code/blob/master/dot_product/dp.cpp)
+- [Dot Product Benchmarks](https://github.com/CoffeeBeforeArch/misc_code/blob/master/dot_product/dp.cpp)
 - My Email: CoffeeBeforeArch@gmail.com
+
+## Compiling the Code
+
+The following results were collected using [Google Benchmark](https://github.com/google/benchmark) and the [perf Linux profiler](https://perf.wiki.kernel.org/index.php/Main_Page). The benchmark code was compiled using the following was compiled using:
+
+```bash
+g++ dp.cpp -std=c++2a -O3 -lbenchmark -lpthread -ltbb -march=native -mtune=native
+```
+
+The Google benchmark code all take roughly the following form.
+
+```cpp
+// Benchmark the baseline C-style dot product
+static void DP(benchmark::State &s) {
+  // Get the size of the vector
+  size_t N = 1 << s.range(0);
+
+  // Initialize the vectors
+  std::vector<float> v1;
+  std::fill_n(std::back_inserter(v1), N, rand() % 100);
+  std::vector<float> v2;
+  std::fill_n(std::back_inserter(v2), N, rand() % 100);
+
+  // Keep the result from being optimized away
+  volatile float result = 0;
+
+  // Our benchmark loop
+  while (s.KeepRunning()) {
+    result = dot_product#(v1, v2);
+  }
+}
+BENCHMARK(DP)->DenseRange(8, 10);
+```
+
+All we're doing is creating 2 vectors of 2^N elements and passing them into our `dot_product1(...)` function. I've marked the variable that stores the value returned by the function as volatile to prevent it from being optimized away by the compiler. Based on our `DenseRange(8, 10)` at the end of the benchmark, we'll be testing vector sizes of 2^8, 2^9, and 2^10 elements.
 
 ## Baseline Dot Product
 
@@ -29,36 +64,9 @@ int dot_product1(std::vector<float> &__restrict v1,
 }
 ```
 
-Nothing crazy in this first implementation. All we're doing is using a for loop to iterate through both vectors, multiplying the elements together and accumulating the partial results into a temporary variable. One thing to note is that this is a very C-style way to write this function (with the exception of using a vector). It's not incredibly difficult to discern how things are being calculated, but it also isn't immedaitely clear.
+Nothing crazy in this first implementation. All we're doing is using a for loop to iterate through both vectors, multiplying the elements together, and accumulating the partial results into a temporary variable. One thing to note is that this is a very C-style way to write this function (with the exception of using a vector). It's not incredibly difficult to discern how things are being calculated, but it also isn't immedaitely clear.
 
-Let's go ahead and take a look at our benchmark code for this function:
-
-```cpp
-// Benchmark the baseline C-style dot product
-static void baseDP(benchmark::State &s) {
-  // Get the size of the vector
-  size_t N = 1 << s.range(0);
-
-  // Initialize the vectors
-  std::vector<float> v1;
-  std::fill_n(std::back_inserter(v1), N, rand() % 100);
-  std::vector<float> v2;
-  std::fill_n(std::back_inserter(v2), N, rand() % 100);
-
-  // Keep the result from being optimized away
-  volatile float result = 0;
-
-  // Our benchmark loop
-  while (s.KeepRunning()) {
-    result = dot_product1(v1, v2);
-  }
-}
-BENCHMARK(baseDP)->DenseRange(8, 10);
-```
-
-All we're doing is creating 2 vectors of 2^N elements, and passing them into our `dot_product1(...)` function. I've marked the variable that stores the value returned by the function as volatile to prevent it from being optimized away by the compiler. Based on our `DenseRange(8, 10)` at the end of the benchmark, we'll be testing vector sizes of 2^8, 2^9, and 2^10 elements.
-
-Let's run the benchmark and see what we get as results.
+Let's run our benchmark and see what we get as results.
 
 ```
 -----------------------------------------------------
@@ -151,20 +159,20 @@ Pretty close to our original function! Now let's see what the assembly looks lik
 
 The same inner-loop! We got just as optimized of a dot product implementation using the STL as we did with a hand-rolled loop.
 
-### Discussion on std::transform_reduce(...)
+## Modern Dot Product w/ Double Initial Value
 
-An interesting side-note on `transform_reduce(...)` is the difference in performance experienced when the type of the init value is changed. For our `moderDP` run, we accumulated the dot product of two vectors of floats into a floating point number `0.0f`. However, by changing the precision to double (e,g, `0.0`), here are the performance numbers I measured.
+One interesting thing I observed with `transform_reduce(...)` is the difference in performance when the type of the initial value is changed. For our `modernDP` run, we accumulated the dot product of two vectors of floats into a floating point number (`0.0f`). However, let's see what happens when we change the precision to double (e,g, `0.0`). These are the performance numbers I measured.
 
 ```asm
-------------------------------------------------------
-Benchmark            Time             CPU   Iterations
-------------------------------------------------------
-modernDP/8         196 ns          195 ns     14348574
-modernDP/9         388 ns          388 ns      7210663
-modernDP/10        776 ns          776 ns      3573320
+-------------------------------------------------------------
+Benchmark                   Time             CPU   Iterations
+-------------------------------------------------------------
+modernDP_double/8         196 ns          195 ns     14348574
+modernDP_double/9         388 ns          388 ns      7210663
+modernDP_double/10        776 ns          776 ns      3573320
 ```
 
-Our performance... increased (significantly)! Let's take a look at the assembly to see what happened.
+Our performance... increased (and significantly)! Let's take a look at the assembly to see what happened.
 
 ```asm
   1.13 │ a0:   vmovss (%rax),%xmm8                                                                                                         ▒
@@ -205,7 +213,9 @@ Our performance... increased (significantly)! Let's take a look at the assembly 
   0.18 │     ↑ jne    407f80 <dot_product2(std::vector<float, std::allocator<float> >&, std::vector<float, std::allocator<float> >&)+0xa0> ▒
 ```
 
-Let's do a little digging into why an inner-loop with more instructions seems to be faster than one with fewer instructions. We can start understanding the performance using the built in metric groups with perf. We'll start with the `Pipeline` metric group.
+Interesting! An inner-loop with more instructions (a number of which are just of conversion) seems to be faster than one with fewer instructions! We can start understanding the performance using the built in metric groups in `perf`. We'll start with the `Pipeline` metric group.
+
+Here are the results for accumulating into a float.
 
 ```
 -------------------------------------------------------------------------
@@ -221,6 +231,8 @@ modernDP/10/iterations:2000000       1287 ns         1287 ns      2000000
      5,175,967,371      uops_executed.thread      #      2.6 ILP                    
      4,028,989,500      uops_executed.core_cycles_ge_1                                   
 ```
+
+And here are the results of accumulating into a double.
 
 ```
 --------------------------------------------------------------------------------
@@ -239,6 +251,8 @@ modernDP_double/10/iterations:2000000        778 ns          778 ns      2000000
 
 Some interesting results! It looks like our instruction-level parallelism (ILP) is over 2x greater in the case where we accumulate into a double. Let's dig a little deeper, and collect the number of pipeline resource stall for each benchmark.
 
+Here are the results from accumulating into a float.
+
 ```
 -------------------------------------------------------------------------
 Benchmark                               Time             CPU   Iterations
@@ -252,6 +266,8 @@ modernDP/10/iterations:2000000       1273 ns         1273 ns      2000000
        2.567031313 seconds time elapsed
 
 ```
+
+And here are the results from accumulating into a double.
 
 ```
 --------------------------------------------------------------------------------
@@ -269,17 +285,17 @@ modernDP_double/10/iterations:2000000        768 ns          768 ns      2000000
 
 It looks like we encounter ~3.5x more pipeline resource stalls when accumulating into a float than into a double!
 
-So what happened? My initial impression is that loop when accumulating into a double, while having a greater number of instructions, has also a greater number of independant instructions than our loop when accumulating into a float. By having fewer dependancies, we can have more instructions executing and completing in parallel than in the tighter loop.
+So what happened? My initial impression is that when we accumulate into a double, there is a greater number of independant instructions than our loop that accumulates results into a float. By having more instructions with fewer dependancies between them, we can better utilize our available hardware resouces instead of stalling and waiting on dependencies. This seems to compensate larger number of instructions executed.
 
 ## Hand-Tuned Dot Product
 
-The compiler vectorized our program (to the best of it's ability), but that doesn't mean it selected the correct instructions. One key challenge of translating high-level code into low-level instructions is understanding what the programmer intended. While it's obvious to us that we're performing a dot product, it's not necessarily obvious to the compiler.
+The compiler vectorized our program (to the best of it's ability), but that doesn't mean it selected the correct instructions (from a performance standpoint). One key challenge of translating high-level code into low-level instructions is understanding what the programmer intended. While it's obvious to us that we're performing a dot product, it's not necessarily obvious to the compiler.
 
-Let's write a final version of our dot product function that using the dot product instrinsic. Here's how mine looks.
+Let's write a final version of our dot product function that uses the dot product instrinsic. Here's how mine looks.
 
 ```cpp
 // Hand-vectorized dot product
-float dot_product3(const float *__restrict v1, const float *v2,
+float dot_product4(const float *__restrict v1, const float *v2,
                    const size_t N) {
   auto tmp = 0.0f;
   for (size_t i = 0; i < N; i += 8) {
@@ -303,7 +319,35 @@ Here, we're directly using the vector dot product intrinsic `mm_256_dp_ps(...)`.
 
 One thing to note here is that intrinsics usually require memory that has been aligned to some boundary. For the case of `_mm256_dp_ps(...)`, I've aligned the arrays of floats to 32 bytes. Your program will likely crash if you just call `new` or `malloc` instead of something like `aligned_alloc` or `posix_memalign`.
 
-Let's take a look at the performance results.
+Here is how the Google benchmark code looks:
+
+```cpp
+// Benchmark our hand-tuned dot product
+static void handTunedDP(benchmark::State &s) {
+  // Get the size of the vector
+  size_t N = 1 << s.range(0);
+
+  // Initialize the vectors
+  // Align memory to 32 bytes for the vector instruction
+  float *v1 = (float *)aligned_alloc(32, N * sizeof(float));
+  float *v2 = (float *)aligned_alloc(32, N * sizeof(float));
+  for (size_t i = 0; i < N; i++) {
+    v1[i] = rand() % 100;
+    v2[i] = rand() % 100;
+  }
+
+  // Keep our result from being optimized away
+  volatile float result = 0;
+
+  // Our benchmark loop
+  while (s.KeepRunning()) {
+    result = dot_product4(v1, v2, N);
+  }
+}
+BENCHMARK(handTunedDP)->DenseRange(8, 10)->Iterations(2000000);
+```
+
+Fairly close to the other benchmarks. Let's take a look at the performance results.
 
 ```
 ---------------------------------------------------------
@@ -328,7 +372,11 @@ Significantly faster than all three previous benchmarks! Now, let's take a look 
 
 ```
 
-We can see the instruction we manually selected near the top of the loop (`vdpps`). Let's take a look at some of those pipeline statistics from earlier, and discuss how we can they can be misleading if used incorrectly.
+We can see the instruction we manually selected near the top of the loop (`vdpps`). Intrinsics are really just wrappers around assembly instructions. 
+
+## Pitfalls in Performance Analysis
+
+Let's take a look at some of those pipeline statistics from earlier and discuss how they can be misleading if used incorrectly.
 
 ```
 ----------------------------------------------------------------------------
@@ -345,7 +393,7 @@ handTunedDP/10/iterations:2000000        219 ns          219 ns      2000000
      1,183,241,927      uops_executed.core_cycles_ge_1                                   
 ```
 
-It looks like we have lower instruction-level parallelism (ILP) than the `modernDP_double` from earlier, but are still over 3x faster. ILP isn't everything! We're working with a very complicated multi-variate problem. This means the explination of one performance difference may give no insights into another. Let's take a look at the FLOPs metric group to gain some better insights.
+It looks like we have lower instruction-level parallelism (ILP) than the `modernDP_double` benchmark from earlier. However, we are still over 3x faster! ILP isn't everything! We're working with a very complicated multi-variate problem (CPU performance). This means the explination of one performance difference may give no insights into another. Let's take a look at the FLOPs metric group to gain some better insights.
 
 Here are the results from the `modernDP_double`.
 
