@@ -17,6 +17,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Aliasing]({% post_url 2020-04-12-aliasing %})
 
+- [Vector Instructions]({% post_url 2020-04-23-vectorization %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
