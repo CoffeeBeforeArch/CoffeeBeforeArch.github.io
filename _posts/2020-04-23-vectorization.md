@@ -309,13 +309,13 @@ float dot_product4(const float *__restrict v1, const float *v2,
     // Avoid type punning using memcpy
     std::memcpy(r, &rv, sizeof(float) * 8);
 
-    tmp += r[0] * r[4];
+    tmp += r[0] + r[4];
   }
   return tmp;
 }
 ```
 
-Here, we're directly using the vector dot product intrinsic `mm_256_dp_ps(...)`. This does a dot product on 8 floating point numbers at a time. One thing to note is that this intrinsic does not perform the full reduction (it does a partial reduction of the upper and lower products only).
+Here, we're directly using the vector dot product intrinsic `mm_256_dp_ps(...)`. This does a dot product on 8 floating point numbers at a time. One thing to note is that this intrinsic does not perform the full reduction (it does a partial reduction of the upper and lower products only). This explains the `tmp += r[0] + r[4]` at the end of the loop.
 
 One thing to note here is that intrinsics usually require memory that has been aligned to some boundary. For the case of `_mm256_dp_ps(...)`, I've aligned the arrays of floats to 32 bytes. Your program will likely crash if you just call `new` or `malloc` instead of something like `aligned_alloc` or `posix_memalign`.
 
@@ -353,22 +353,23 @@ Fairly close to the other benchmarks. Let's take a look at the performance resul
 ---------------------------------------------------------
 Benchmark               Time             CPU   Iterations
 ---------------------------------------------------------
-handTunedDP/8        71.1 ns         71.1 ns     39371040
-handTunedDP/9         127 ns          127 ns     22049458
-handTunedDP/10        259 ns          259 ns     10830232
+handTunedDP/8        80.4 ns         80.4 ns     34932124
+handTunedDP/9         147 ns          147 ns     18977751
+handTunedDP/10        298 ns          298 ns      9396390
 ```
 
 Significantly faster than all three previous benchmarks! Now, let's take a look at the assembly that was generated.
 
 ```asm
-  0.01 │108:┌─→vmovaps 0x0(%r13,%rax,4),%ymm3                                                 ▒
- 35.65 │    │  vdpps  $0xf1,(%r14,%rax,4),%ymm3,%ymm0                                         ▒
-  0.02 │    │  add    $0x8,%rax                                                               ▒
-       │    │  vmovaps %xmm0,%xmm1                                                            ▒
-  0.02 │    │  vextractf128 $0x1,%ymm0,%xmm0                                                  ▒
- 63.62 │    │  vfmadd231ss %xmm0,%xmm1,%xmm2                                                  ▒
+  0.30 │108:┌─→vmovaps 0x0(%r13,%rax,4),%ymm3                                                 ▒
+ 29.56 │    │  vdpps  $0xf1,(%r14,%rax,4),%ymm3,%ymm0                                         ▒
+  0.20 │    │  add    $0x8,%rax                                                               ▒
+  0.40 │    │  vmovaps %xmm0,%xmm1                                                            ▒
+  0.03 │    │  vextractf128 $0x1,%ymm0,%xmm0                                                  ▒
+ 25.46 │    │  vaddss %xmm0,%xmm1,%xmm0                                                       ▒
+ 43.43 │    │  vaddss %xmm0,%xmm2,%xmm2                                                       ▒
        │    ├──cmp    %rax,%rbx                                                               ▒
-  0.01 │    └──ja     108                                                                     ▒
+  0.08 │    └──ja     108                                                                     ▒
 
 ```
 
@@ -382,18 +383,19 @@ Let's take a look at some of those pipeline statistics from earlier and discuss 
 ----------------------------------------------------------------------------
 Benchmark                                  Time             CPU   Iterations
 ----------------------------------------------------------------------------
-handTunedDP/10/iterations:2000000        219 ns          219 ns      2000000
+handTunedDP/10/iterations:2000000        386 ns          386 ns      2000000
 
  Performance counter stats for './a.out --benchmark_filter=handTunedDP/10':
 
-     3,095,572,314      uops_retired.retire_slots #      1.5 UPI                    
-     4,149,165,722      inst_retired.any                                            
-     1,335,486,874      cycles                                                      
-     2,853,146,930      uops_executed.thread      #      4.8 ILP                    
-     1,183,241,927      uops_executed.core_cycles_ge_1                                   
+     3,353,158,730      uops_retired.retire_slots #      1.4 UPI                    
+     4,663,122,016      inst_retired.any                                            
+     2,386,337,167      cycles                                                      
+     3,103,026,491      uops_executed.thread      #      3.4 ILP                    
+     1,839,325,335      uops_executed.core_cycles_ge_1                                                              
+
 ```
 
-It looks like we have lower instruction-level parallelism (ILP) than the `modernDP_double` benchmark from earlier. However, we are still over 3x faster! ILP isn't everything! We're working with a very complicated multi-variate problem (CPU performance). This means the explination of one performance difference may give no insights into another. Let's take a look at the FLOPs metric group to gain some better insights.
+It looks like we have lower instruction-level parallelism (ILP) than the `modernDP_double` benchmark from earlier. However, we are still over 2x faster! ILP isn't everything! We're working with a very complicated multi-variate problem (CPU performance). This means the explanation of one performance difference may give no insights into another. Let's take a look at the FLOPs metric group to gain some better insights.
 
 Here are the results from the `modernDP_double`.
 
@@ -420,20 +422,20 @@ And here are the results for `handTunedDP`.
 ----------------------------------------------------------------------------
 Benchmark                                  Time             CPU   Iterations
 ----------------------------------------------------------------------------
-handTunedDP/10/iterations:2000000        221 ns          221 ns      2000000
+handTunedDP/10/iterations:2000000        396 ns          396 ns      2000000
 
  Performance counter stats for './a.out --benchmark_filter=handTunedDP/10':
 
-       511,835,852      fp_arith_inst_retired.scalar_single #     10.0 GFLOPs                   (66.02%)
-                12      fp_arith_inst_retired.scalar_double                                     (66.94%)
-                 0      fp_arith_inst_retired.128b_packed_double                                     (67.56%)
-                 0      fp_arith_inst_retired.128b_packed_single                                     (67.57%)
-                 0      fp_arith_inst_retired.256b_packed_double                                     (66.41%)
-       516,591,683      fp_arith_inst_retired.256b_packed_single                                     (65.49%)
+       512,503,977      fp_arith_inst_retired.scalar_single #      5.7 GFLOPs                   (66.80%)
+                37      fp_arith_inst_retired.scalar_double                                     (66.81%)
+                 0      fp_arith_inst_retired.128b_packed_double                                     (66.80%)
+                 0      fp_arith_inst_retired.128b_packed_single                                     (66.80%)
+                 0      fp_arith_inst_retired.256b_packed_double                                     (66.40%)
+       514,838,204      fp_arith_inst_retired.256b_packed_single                                     (66.40%)
 
 ```
 
-For our hand-tuned version, we're primarily doing 256-bit packed single-precision operations, while in the `modernDP_double` version, we're primarily doing scalar single-precision opreations with only a few 256-bit packed single-precision operations. This leads to almost ~4x the GFLOPs!
+For our hand-tuned version, we're primarily doing 256-bit packed single-precision operations, while in the `modernDP_double` version, we're primarily doing scalar single-precision opreations with only a few 256-bit packed single-precision operations. This likely explains why we have almost ~2x the GFLOPs!
 
 ## Concluding Remarks
 
