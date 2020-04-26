@@ -161,7 +161,20 @@ The same inner-loop! We got just as optimized of a dot product implementation us
 
 ## Modern Dot Product w/ Double Initial Value
 
-One interesting thing I observed with `transform_reduce(...)` is the difference in performance when the type of the initial value is changed. For our `modernDP` run, we accumulated the dot product of two vectors of floats into a floating point number (`0.0f`). However, let's see what happens when we change the precision to double (e,g, `0.0`). These are the performance numbers I measured.
+One interesting thing I observed with `transform_reduce(...)` is the difference in performance when the type of the initial value is changed. For our `modernDP` run, we accumulated the dot product of two vectors of floats into a floating point number (`0.0f`). However, let's see what happens when we change the precision to double (e,g, `0.0`). 
+
+Here is the code with this minor modifications.
+
+```cpp
+// Modern C++ dot product
+float dot_product3(std::vector<float> &__restrict v1,
+                 std::vector<float> &__restrict v2) {
+  return std::transform_reduce(std::execution::unseq, begin(v1), end(v1),
+                               begin(v2), 0.0);
+}
+```
+
+And here are the performance numbers I measured.
 
 ```asm
 -------------------------------------------------------------
@@ -249,7 +262,7 @@ modernDP_double/10/iterations:2000000        778 ns          778 ns      2000000
      4,736,740,748      uops_executed.core_cycles_ge_1      
 ```
 
-Some interesting results! It looks like our instruction-level parallelism (ILP) is over 2x greater in the case where we accumulate into a double. Let's dig a little deeper, and collect the number of pipeline resource stall for each benchmark.
+Some more interesting results! It looks like our instruction-level parallelism (ILP) is over 2x greater in the case where we accumulate into a double. Let's dig a little deeper, and collect the number of pipeline resource stall for each benchmark.
 
 Here are the results from accumulating into a float.
 
@@ -315,7 +328,7 @@ float dot_product4(const float *__restrict v1, const float *v2,
 }
 ```
 
-Here, we're directly using the vector dot product intrinsic `mm_256_dp_ps(...)`. This does a dot product on 8 floating point numbers at a time. One thing to note is that this intrinsic does not perform the full reduction (it does a partial reduction of the upper and lower products only). This explains the `tmp += r[0] + r[4]` at the end of the loop.
+Here, we're directly using the vector dot product intrinsic `_mm_256_dp_ps(...)`. This does a dot product on 8 floating point numbers at a time. One thing to note is that this intrinsic does not perform the full reduction (it does a partial reduction of the upper and lower products only). This explains the `tmp += r[0] + r[4]` at the end of the loop.
 
 One thing to note here is that intrinsics usually require memory that has been aligned to some boundary. For the case of `_mm256_dp_ps(...)`, I've aligned the arrays of floats to 32 bytes. Your program will likely crash if you just call `new` or `malloc` instead of something like `aligned_alloc` or `posix_memalign`.
 
@@ -453,4 +466,6 @@ Cheers,
 
 - [My YouTube Channel](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
 - [My GitHub Account](https://github.com/CoffeeBeforeArch)
+- My Email: CoffeeBeforeArch@gmail.com
+- [Dot Product Benchmarks](https://github.com/CoffeeBeforeArch/misc_code/blob/master/dot_product/dp.cpp)
 - My Email: CoffeeBeforeArch@gmail.com
