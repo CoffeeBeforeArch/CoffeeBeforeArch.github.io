@@ -298,7 +298,7 @@ modernDP_double/10/iterations:2000000        768 ns          768 ns      2000000
 
 It looks like we encounter ~3.5x more pipeline resource stalls when accumulating into a float than into a double!
 
-So what happened? My initial impression is that when we accumulate into a double, there is a greater number of independant instructions than our loop that accumulates results into a float. By having more instructions with fewer dependancies between them, we can better utilize our available hardware resouces instead of stalling and waiting on dependencies. This seems to compensate larger number of instructions executed.
+So what happened? My initial impression is that when we accumulate into a double, there is a greater number of independant instructions than in our loop that accumulates partial results into a float. By having more instructions with fewer dependancies between them, we can better utilize our available hardware resouces instead of stalling and waiting on dependencies. This seems to compensate for executing more instructions.
 
 ## Hand-Tuned Dot Product
 
