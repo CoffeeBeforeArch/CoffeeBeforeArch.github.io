@@ -16,13 +16,13 @@ The majority of arithmetic hardware in modern processors is for vector instructi
 
 ## Compiling the Code
 
-The following results were collected using [Google Benchmark](https://github.com/google/benchmark) and the [perf Linux profiler](https://perf.wiki.kernel.org/index.php/Main_Page). The benchmark code was compiled using the following was compiled using:
+The following results were collected using [Google Benchmark](https://github.com/google/benchmark) and the [perf Linux profiler](https://perf.wiki.kernel.org/index.php/Main_Page). The benchmark code was compiled using the following command:
 
 ```bash
 g++ dp.cpp -std=c++2a -O3 -lbenchmark -lpthread -ltbb -march=native -mtune=native
 ```
 
-The Google benchmark code all take roughly the following form.
+The Google benchmark code follows the following form.
 
 ```cpp
 // Benchmark the baseline C-style dot product
