@@ -468,4 +468,3 @@ Cheers,
 - [My GitHub Account](https://github.com/CoffeeBeforeArch)
 - My Email: CoffeeBeforeArch@gmail.com
 - [Dot Product Benchmarks](https://github.com/CoffeeBeforeArch/misc_code/blob/master/dot_product/dp.cpp)
-- My Email: CoffeeBeforeArch@gmail.com
