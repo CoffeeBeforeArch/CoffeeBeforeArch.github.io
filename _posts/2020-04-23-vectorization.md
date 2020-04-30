@@ -226,7 +226,7 @@ Our performance... increased (and significantly)! Let's take a look at the assem
   0.18 │     ↑ jne    407f80 <dot_product2(std::vector<float, std::allocator<float> >&, std::vector<float, std::allocator<float> >&)+0xa0> ▒
 ```
 
-Interesting! An inner-loop with more instructions (a number of which are just of conversion) seems to be faster than one with fewer instructions! We can start understanding the performance using the built in metric groups in `perf`. We'll start with the `Pipeline` metric group.
+Interesting! An inner-loop with more instructions (a number of which are just for conversion) seems to be faster than one with fewer instructions! We can start understanding the performance using the built in metric groups in `perf`. We'll start with the `Pipeline` metric group.
 
 Here are the results for accumulating into a float.
 
