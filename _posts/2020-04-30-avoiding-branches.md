@@ -5,7 +5,9 @@ title: Avoiding Branches
 
 # Avoiding Branches
 
-Modern processors speculate if branches are taken and their targets. If a processor speculates incorrectly, it must rewind all incorrectly executed instructions, and continue down the correct control flow path. This can lead to significant performance problems when a branch is difficult to predict, and the processor misspeculates frequently. While the compiler can remove some branches using techniques like scalarization, some problematic ones require programmer intervention. In this blog post, we'll be looking at how we can remove branches by integrating a condition with a mathematical operation.
+Modern processors speculate if branches are taken and their targets. If a processor speculates incorrectly, it must rewind all incorrectly executed instructions, and continue down the correct control flow path. This can lead to significant performance problems when a branch is difficult to predict, and the processor misspeculates frequently. While the compiler can remove some branches using techniques like scalarization, some problematic ones require programmer intervention.
+
+In this blog post, we'll be looking at how we can remove branches by integrating a condition with a mathematical operation. We'll some different ways we can approach this problem, as well as dicussing how both our choice of types and immediate values can impact performance.
 
 ## Links
 
@@ -332,7 +334,7 @@ logicBenchInt/11        207 ns          207 ns     13450254
 logicBenchInt/12        380 ns          380 ns      7365575
 ```
 
-Whoah! That's akmost 10x faster than our previous best results! Let's go ahead and take a look at the assembly to see why.
+Whoah! That's almost 10x faster than our previous best results! Let's go ahead and take a look at the assembly to see why.
 
 ```asm
   1.48 │398:┌─→vmovdqu (%rax),%ymm1                                        ▒
@@ -346,13 +348,168 @@ Whoah! That's akmost 10x faster than our previous best results! Let's go ahead a
   0.19 │    └──jne    398                                                  ▒
 ```
 
-Somewhat unsurpisingly, our compiler vectorized the code for us! 
+Our compiler vectorized the code for us! In our previous benchmarks, the compiler could not vectorize the code because all the booleans were packed in a bit-vector. Each bit therefore has to be extracted using shift and `and` operations. When we're using integers, we don't have this problem, and the compiler can extrace multiple integers that we're using to store booleans using a vector memory operation like `vmovdqu`.
+
+However, we didn't quite make and apples-to-apples comparison. It's not a surprising conclusion exploiting data parallelism can speed up an application. However, the compiler may not want to be able to vectorize this operation for some reason (like aliasing) in a real application. Let's take a step back and and re-run the test with vectorization disabled. All we need to do is add the `-fno-tree-vectorize` to our compiler flags. 
+
+Here were the results.
+
+```
+logicBenchIntNonPower/10       1004 ns         1004 ns      2788922
+logicBenchIntNonPower/11       2000 ns         2000 ns      1395663
+logicBenchIntNonPower/12       3996 ns         3996 ns       700189
+```
+
+Better performance than `logicBenchBoolNonPower`, but definitely not the 10x speedup from vectorization. Let's dig into the assembly and see what we find.
+
+```asm
+  0.72 │340:┌─→mov    (%rax),%edx                                     ▒
+ 32.76 │    │  add    $0x4,%rax                                       ▒
+  0.51 │    │  lea    (%rdx,%rdx,4),%esi                              ▒
+ 65.03 │    │  lea    (%rdx,%rsi,8),%edx                              ▒
+  0.36 │    │  add    %edx,%ecx                                       ▒
+       │    ├──cmp    %rbx,%rax                                       ▒
+  0.08 │    └──jne    340                                             ▒
+```
+
+Very similar to `logicBenchBoolNonPower`, except we can use the input boolean stored in an integer directly instead of having to extract the condition value from a bit-vector. This likely accounts for the small improvement in performance over the equivilant code for a bool. We also see the same compiler optimization of using `lea` instructions instead of `imul` to conditionally add a constant value of 41 to `sink`.
+
+Let's explore the same train of thought we did for out boolean benchmarks. We'll look at the impact that adding a power of two constant, and a run-time constant to the `sink` variable, but again, using the integer type to hold the condition variable. Here are the timing results.
+
+```
+logicBenchIntPower/10           672 ns          672 ns      4158108
+logicBenchIntPower/11          1343 ns         1343 ns      2093035
+logicBenchIntPower/12          2676 ns         2676 ns      1045922
+logicBenchIntInput/10           673 ns          673 ns      4068004
+logicBenchIntInput/11          1337 ns         1337 ns      2094360
+logicBenchIntInput/12          2668 ns         2668 ns      1048372
+```
+
+What we find in the assembly for both are extremely tight loops. Here is the loop for the power of two input.
+
+```asm
+  0.44 │340:┌─→mov    $0x5,%edx                                    ▒
+ 47.96 │    │  shlx   %edx,(%rax),%edx                             ▒
+  0.06 │    │  add    $0x4,%rax                                    ▒
+ 50.77 │    │  add    %edx,%ecx                                    ▒
+       │    ├──cmp    %rbx,%rax                                    ▒
+  0.09 │    └──jne    340                                          ▒
+```
+
+We can see that each iteration we simply shifts the boolean input left by 5 (to create either 0 or 32), and add the result to `sink`.
+
+Here is the assembly when a constant with a value determined at run-time.
+
+```
+  0.56 │348:┌─→mov    (%rax),%ecx                                  ▒
+  0.17 │    │  add    $0x4,%rax                                    ▒
+ 50.82 │    │  imul   %esi,%ecx                                    ▒
+ 47.85 │    │  add    %ecx,%edx                                    ▒
+       │    ├──cmp    %rax,%rbx                                    ▒
+  0.11 │    └──jne    348                                          ▒
+```
+
+All we're doing is multiplying the input variable by the run-time constant, and adding the result to `sink`.
+
+To change gears, we again going to re-focus on type-based performance differences instead of value-based ones. We saw with an integer we get some performance improvement from vectorization or not having to unpack boolean bit from a bit-vector. However, we're only using 1/32 bits in an integer. If we're only using the values 1 and 0, we could use a smaller data type. Let's use a char! 1/4 the size of an integer, but won't require bit-shifting and mask operations to extract the value.
+
+Let's re-enable vectorization and try a vector of chars with the value of either 0 or 1. Here were my performance numbers.
+
+```
+logicBenchCharNonPower/10       94.5 ns         94.5 ns     29632602
+logicBenchCharNonPower/11        189 ns          189 ns     14861750
+logicBenchCharNonPower/12        378 ns          378 ns      7397448
+```
+
+Very similar results to using an integer! Here's what the assmebly looked like.
+
+```
+  0.53 │388:┌─→vmovdqu (%rax),%ymm2                                                    ▒
+  0.35 │    │  add    $0x20,%rax                                                       ▒
+  9.88 │    │  vpmovsxbw %xmm2,%ymm3                                                   ▒
+  0.31 │    │  vpmullw 0x41173(%rip),%ymm3,%ymm3        # 449c40 <_IO_stdin_used+0x200>▒
+  0.46 │    │  vextracti128 $0x1,%ymm2,%xmm2                                           ▒
+  1.73 │    │  vpmovsxwd %xmm3,%ymm1                                                   ▒
+ 10.54 │    │  vextracti128 $0x1,%ymm3,%xmm3                                           ▒
+  3.52 │    │  vpaddd %ymm0,%ymm1,%ymm0                                                ▒
+  0.33 │    │  vpmovsxbw %xmm2,%ymm2                                                   ▒
+  0.35 │    │  vpmovsxwd %xmm3,%ymm3                                                   ▒
+ 16.38 │    │  vpaddd %ymm0,%ymm3,%ymm3                                                ▒
+  0.29 │    │  vpmullw 0x41148(%rip),%ymm2,%ymm2        # 449c40 <_IO_stdin_used+0x200>▒
+  6.23 │    │  vpmovsxwd %xmm2,%ymm0                                                   ▒
+  2.15 │    │  vextracti128 $0x1,%ymm2,%xmm2                                           ▒
+ 16.29 │    │  vpaddd %ymm3,%ymm0,%ymm0                                                ▒
+  0.18 │    │  vpmovsxwd %xmm2,%ymm2                                                   ◆
+ 27.36 │    │  vpaddd %ymm0,%ymm2,%ymm0                                                ▒
+  0.01 │    ├──cmp    %r12,%rax                                                        ▒
+  0.27 │    └──jne    388                                                              ▒
+```
+
+Vectorization again, but significantly more instructions than with an integer. This is likely because each 128-bit register can now hold 16 booleans stored as chars instead of only 4 booleans stored as integers. While we have more instruction, we can make a greater amount of forward progress.
+
+Once again, let's take a step back and disable vectorization to make an apples-to-apples comparison. Here are my three results.
+
+```
+--------------------------------------------------------------------
+Benchmark                          Time             CPU   Iterations
+--------------------------------------------------------------------
+logicBenchCharNonPower/10        637 ns          637 ns      4394048
+logicBenchCharNonPower/11       1265 ns         1265 ns      2214036
+logicBenchCharNonPower/12       2521 ns         2520 ns      1110496
+logicBenchCharPower/10           474 ns          474 ns      5928468
+logicBenchCharPower/11           939 ns          939 ns      2988854
+logicBenchCharPower/12          1867 ns         1866 ns      1499018
+logicBenchCharInput/10           494 ns          494 ns      5704480
+logicBenchCharInput/11           975 ns          974 ns      2875398
+logicBenchCharInput/12          1945 ns         1944 ns      1443183
+```
+
+Interesting! A similar trend to what we saw with integers (but slightly faster)! Let's take a quick look at the instructions to see if we can understand why. 
+
+Here is for our non power of two constant.
+
+```asm
+ 19.48 │328:┌─→movsbl (%rax),%edx                                                      ▒
+  0.29 │    │  inc    %rax                                                             ▒
+ 36.17 │    │  lea    (%rdx,%rdx,4),%esi                                               ▒
+  6.71 │    │  lea    (%rdx,%rsi,8),%edx                                               ▒
+ 36.49 │    │  add    %edx,%ecx                                                        ▒
+       │    ├──cmp    %rax,%rbx                                                        ▒
+  0.15 │    └──jne    328                                                              ▒
+```
+
+We see the same types of optimizations as the other two cases (with `lea`).
+
+Let's examing the other two cases to see if the follow the same trends as bool and int. Here is the listing for the power of two constant.
+
+```asm
+ 19.81 │328:┌─→movsbl (%rax),%edx                                                      ▒
+ 17.87 │    │  inc    %rax                                                             ▒
+ 24.09 │    │  shl    $0x5,%edx                                                        ▒
+ 22.84 │    │  add    %edx,%ecx                                                        ▒
+  0.02 │    ├──cmp    %rax,%rbx                                                        ▒
+ 14.35 │    └──jne    328                                                              ▒
+
+```
+
+And finally, for the run-time input.
+
+```asm
+ 16.95 │338:┌─→movsbq (%rax),%rdx                                                      ▒
+ 17.02 │    │  inc    %rax                                                             ▒
+ 27.05 │    │  imul   %rsi,%rdx                                                        ▒
+ 25.09 │    │  add    %edx,%ecx                                                        ▒
+  0.01 │    ├──cmp    %rax,%rbx                                                        ▒
+ 13.12 │    └──jne    338                                                              ▒
+```
+
+Very similar code! Our performance gainst are likely coming from the fact that we need 1/4 the number of iterations of our loop because our data is 4x as dense! For a third time, the compiler's choice of using `lea` instead of `imul` seems to be a poor choice.
 
 ## Concluding Remarks
 
-Vector instructions give us the opportunity to exploit data-level parallelism in our programs. While our compiler does a good job of accelerating our programs using these instructions, it can still have trouble interpreting what exactly we are trying to do.
+Every part of program can impact performance. From the immediate values of constants to the data types we use to store values. Understanding how tease-out better performance from the compiler is often an art that is very feedback-based. In this blog we showed that how we conditionally add a constant value can vary significantly in performance. We showed that htis performance can be based on both the types of the inputs, and the actual data values.
 
-Furthermore, performance is non-intuitive! We saw how a loop with more instructions wound up being faster than one with fewer, and how a lower level of instruction level parallelism still could lead to a faster program because of which instructions were being executed.
+We also showed that the compiler does not always make the right decision for performance. While this is certainly not an attack on compiler writers, it is a call for those that care about performance to remain vigilant as to what your compilers are doing, and that it's never a bad idea to sanity check.
 
 As always, feel free to contact me with questions. 
 
