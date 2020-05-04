@@ -5,9 +5,9 @@ title: Avoiding Branches
 
 # Avoiding Branches
 
-Modern processors speculate if branches are taken and their targets. If a processor speculates incorrectly, it must rewind all incorrectly executed instructions, and continue down the correct control flow path. This can lead to significant performance problems when a branch is difficult to predict, and the processor misspeculates frequently. While the compiler can remove some branches using techniques like scalarization, some problematic ones require programmer intervention.
+Modern processors speculate whether or not a branche is taken, and target address of the next instruction. If a processor speculates incorrectly, it must rewind all incorrectly executed instructions, and continue down the correct control flow path. This can lead to significant performance problems when a branch is difficult to predict, and the processor misspeculates frequently. While the compiler can remove some branches using techniques like scalarization, many can only be removed with direct programmer intervention.
 
-In this blog post, we'll be looking at how we can remove branches by integrating a condition with a mathematical operation. We'll some different ways we can approach this problem, as well as dicussing how both our choice of types and immediate values can impact performance.
+In this blog post, we'll be looking at how we can remove branches by integrating a condition with a mathematical operation. We will also be discussing value-dependant and type-dependant performance.
 
 ## Links
 
@@ -43,7 +43,7 @@ static void Bench(benchmark::State &s) {
   std::bernoulli_distribution d(0.5);
 
   // Create a vector of random booleans
-  std::vector<bool> v_in(N);
+  std::vector<some_type> v_in(N);
   std::generate(begin(v_in), end(v_in), [&]() { return d(gen); });
 
   // Output element
@@ -61,11 +61,12 @@ static void Bench(benchmark::State &s) {
 }
 BENCHMARK(branchBench)->DenseRange(10, 12);
 ```
-To set up the experiment, we create a vector of boolean values, and initialize them using a pseudo-random number generator. Inside of our main benchmarking loop, we're going to be testing the performance of conditionally adding a constant value to our `sink` variable. `sink` was dynamically allocated to keep it from being removed by the compiler, but retain the optimizations that were disabled when I marked it as `volatile` or with `benchmark::DoNotOptimize(...)`. We'll be testing input vector sizes of 2^10, 11, and 12.
+
+To set up the experiment, we create a vector of boolean values, and initialize them using a pseudo-random number generator. Inside of our main benchmarking loop, we're going to be testing the performance of conditionally adding a constant value to our `sink` variable. `sink` was dynamically allocated to keep it from being removed by the compiler, but retain the optimizations that were disabled when I marked it as `volatile` or with `benchmark::DoNotOptimize(...)`. We'll be testing input vector sizes of 2^10, 2^11, and 2^12 elements.
 
 ## Baseline Benchmark
 
-Our baseline benchmark will be one that uses a branch to conditionally add numbers to our sink. Here is the inner benchmark loop.
+For our baseline, we will simply use an if-statement to conditionally add a value to our `sink` variable.
 
 ```cpp
 // Benchmark main loop
@@ -75,20 +76,18 @@ while (s.KeepRunning()) {
 }
 ```
 
-Nothing crazy in this first implementation. All we're doing is going through all of our boolean conditions, and conditionally adding the value of 41 to `sink` if the condition is true. 
-
 Let's run our benchmark and see what we get as results.
 
 ```
----------------------------------------------------------
-Benchmark               Time             CPU   Iterations
----------------------------------------------------------
-branchBench/10        814 ns          814 ns      3236121
-branchBench/11       1825 ns         1823 ns      1604909
-branchBench/12      13262 ns        13261 ns       210503
+---------------------------------------------------------------
+Benchmark                     Time             CPU   Iterations
+---------------------------------------------------------------
+branchBenchRandom/10        814 ns          814 ns      3236121
+branchBenchRandom/11       1825 ns         1823 ns      1604909
+branchBenchRandom/12      13262 ns        13261 ns       210503
 ```
 
-Some interesting results right from the start. Increasing the number of operations from 2^10 to 2^11 seems to have doubled the execution time. However, doubling the number of booleans again from 2^11 to 2^12 increased the execution time by over 7x! Let's first take a look at some hot-spot information at the assembly level using the [perf Linux profiler](https://perf.wiki.kernel.org/index.php/Main_Page).
+Some interesting results right from the start. Increasing the number of operations from 2^10 to 2^11 just over doubled the execution time. However, doubling the number of booleans again from 2^11 to 2^12 increased the execution time by over 7x! Let's first take a look at some hot-spot information at the assembly level using the [perf Linux profiler](https://perf.wiki.kernel.org/index.php/Main_Page).
 
 ```asm
  12.76 │1a5:┌─→shlx   %rax,%rbx,%rdx                                     ▒
@@ -103,9 +102,9 @@ Some interesting results right from the start. Increasing the number of operatio
 
 ```
 
-This isn't the entire loop, but it is the core part. All we're doing is shifting a register value over to extract a single bit (our boolean), conditionally adding 0x29 (41 in decimal), then checking if we need to load another 64 booleans stored as individual bits in our 64-bit register by comparing the interation count against 0x3f (63 decimal).
+What we're looking at is the core inner-loop (where the conditional add occurs). We're shifting a register value over to extract a single bit (our boolean), conditionally adding 0x29 (41 in decimal) based on the value, then checking if we need to load another 64 booleans stored as individual bits in a 64-bit register by comparing the interation count against 0x3f (63 decimal).
 
-Let's take a look at some other perf statistics to see how things differ between our three different input sizes. First we'll compare the branch missprediction rates (we'll also fix the number of iterations to 1,000,000).
+Let's take a look at some branch predicition statistics to see how things differ with our three different input sizes. I will also fix the number of iterations to 1,000,000. That can done by adding `->Iterations(1000000)` to the line where the benchmark is registered.
 
 ```
 2,630,213       branch-misses             #    0.09% of all branches
@@ -113,11 +112,76 @@ Let's take a look at some other perf statistics to see how things differ between
 1,367,006,312   branch-misses             #   11.06% of all branches
 ```
 
-Our number of misses increase by first 6x, then by ~100x! That likely explains our huge drop in performance! It seems our branch predictor gets worse the more we abuse it with random numbers!
+_Very_ unexpected results. We'd expect that our branch predictor would always do a poor job with our benchmark when the input data is random. However, it seems to work well for smaller vector sizes (at least for N < 2^12). Do we blame the random number generator? Probably not. We're already not using `std::mt19937` instead of `rand()`. What we should think about is the way Google Benchmark runs our code.
+
+The benchmark will repeat whatever is in the `for (auto _ : s )` loop until either some internal measurements stabilize, or a fixed time or number of iterations has completed. However, our random number generation occurs outside this loop. While we may have high-quality random numbers, and are averaging timing across millions of runs, each run is using *the exact same random numbers*. That means each iteration of the `for (auto _ : s)` loop will have the exact same branch outcomes, and the branch predictor unit eventually learns them.
+
+We can test this hypothesis using a two more benchmarks. We'll now look at `branchBenchFalse` and `branchBenchTrue`. In these benchmarks, our loop either never adds the constant value to `sink`, or always does. This should be a trivial for our branch predictor unit to learn. Here are the timing results for the smallest vector size (2^10).
+
+```
+----------------------------------------------------------------
+Benchmark                      Time             CPU   Iterations
+----------------------------------------------------------------
+branchBenchFalse/10         1198 ns         1198 ns      2339510
+branchBenchTrue/10          1761 ns         1761 ns      1589511
+branchBenchRandom/10         842 ns          842 ns      3283319
+
+```
+
+And here are the number of branch misses.
+
+```
+False:     24,883,530      branch-misses          #    0.81% of all branches
+True:       1,145,795      branch-misses          #    0.04% of all branches
+Random:     2,379,407      branch-misses          #    0.08% of all branches
+```
+
+`branchBenchFalse` and `branchBenchTrue` should have almost no misses because the because the branch always goes a single direction. `branchBenchRandom` has nearly 0 misses as well. This is because branch predictor unit learns the branch outcomes from multiple iterations of our benchmark using the same input data.
+
+Branch predictor units (BPUs) are effective, but have their limits (i.e., the have a fixed amount of storage for branch history and targets). For our benchmark, it can "remember" the results of 2^10 and 2^11 iterations, but does a poor job with 2^12. Let's compare the results of the three benchmarks for the largest vector size. 
+
+```
+---------------------------------------------------------------
+Benchmark                     Time             CPU   Iterations
+---------------------------------------------------------------
+branchBenchFalse/12        4814 ns         4813 ns       583745
+branchBenchTrue/12         5526 ns         5524 ns       516838
+branchBenchRandom/12      12981 ns        12980 ns       216861
+```
+
+And here are the number of branch misses.
+
+```
+False:     95,850,193      branch-misses          #    0.78% of all branches
+True:       1,373,892      branch-misses          #    0.01% of all branches
+Random: 1,352,117,345      branch-misses          #   11.00% of all branches
+```
+
+Still almost 0 misses for our false and true benchmarks, but a significant number for our random one! Since our benchmark uses the same vector of booleans each iteration, we need to ensure that vector is of a sufficient size such that the the BPU can't easily learn the outcomes from previous iterations.
+
+But wait! We're skipped over another interesting result. Our `branchBenchRandom` was faster than `branchBenchFalse` for small vector sizes! `branchBenchRandom` sometimes skips adding our constant value to `sink`, so while we may expect it to be faster than `branchBenchTrue` (which always performs the addition), we would expect it to be slower than `branchBenchFalse` (that never performs the addition)!
+
+Modern Intel pipelines can get instructions from a Decoded Stream Buffer (DSB), or a slower Micro Instruction Trace Enginer (MITE). Let's see which one is providing the uops to our processor's backend. Here are the results for `branchBenchFalse`.
+
+```
+     2,265,959,520      idq.dsb_uops                                                
+     3,368,665,296      idq.mite_uops                                               
+```
+
+And here are the results for `branchBenchRandom`.
+
+```
+     6,294,916,475      idq.dsb_uops                                                
+        15,795,857      idq.mite_uops                                               
+```
+
+Our random benchmark avoids many of the penalites in the legacy MITE pipeline, leading to slightly better performance, despite sometimes performing the addition. However, we'll leave further discussion of this issue to another blog post.
 
 ## Multiplying by a Boolean
 
-One way we can remove a branch is by integrating a boolean's value into an expression. Let's remove the branch by multiplying the constant, 41, by the boolean (1 or 0). That code looks like this.
+One way we can remove a branch is by integrating a boolean's value into an expression. Multiplication and addition are cheap (compared to miss-speculation) so we may see a performance improvement by always performing these operations instead of conditionally skipping them.
+
+Let's remove the branch by multiplying the constant, 41, by the boolean (1 or 0. Here's the inner benchmark loop.
 
 ```cpp
 // Benchmark main loop
@@ -125,6 +189,7 @@ while (s.KeepRunning()) {
  for (auto b : v_in) *sink += 41 * b;
 }
 ```
+
 We've completely removed the branch with the price of sometimes multiplying by 0. Here are the timing results.
 
 ```
@@ -136,7 +201,7 @@ logicBenchBoolNonPower/11       2807 ns         2803 ns       955068
 logicBenchBoolNonPower/12       5482 ns         5481 ns       506292
 ```
 
-More interesting results! We seem to be slightly worse than the benchmark using a branch for the smaller input sizes, but over 4x better at the large input size! Let's look at the assembly to understand how this loop differs.
+More interesting results! We seem to be slightly worse than the benchmark using a branch for vector sizes 2^10 and 2^11, but over 4x better at the large size (2^12)! Let's look at the assembly to understand how this loop differs.
 
 ```asm
  20.35 │1c8:┌─→shlx   %rax,%rbx,%rdx                                               ▒
@@ -154,9 +219,9 @@ More interesting results! We seem to be slightly worse than the benchmark using 
 
 ```
 
-Some new code! This time, we're extracting the boolean through shift + and, the using a combination of `movzbl` and `lea` instructions to perform `*sink += 41 * b;`. But why is the code only gets faster for the largest input size? Let's start by understanding the amount of work each benchmark does. We'll be using instruction count as a proxy for work done. While instructions don't all have the same overhead, we're looking at fairly similar inner-loops, and the instructions are mostly cheap arithmetic operations. We'll therefore start under the simplifying assumption that the benchmark executing fewer instructions should be faster.
+Some new code! We're extracting the boolean through `shlx` + `and` + `setne`, but using a combination of `movzbl` + `lea` + `add` to perform `*sink += 41 * b;`. But are we only faster for the largest input size? Let's start by understanding the amount of work each benchmark does. We'll be using instruction count as a proxy for work done. While different instructions do not have the same overhead, we're looking at fairly similar inner-loops, and the instructions are mostly cheap arithmetic operations. We'll start with the simplifying assumption that the benchmark executing fewer instructions should be faster.
 
-Here are the results for the branch benchmarks.
+Here are the counts for the branch benchmarks.
 
 ```
 8,754,489,905       instructions              #    3.26  insn per cycle
@@ -164,7 +229,7 @@ Here are the results for the branch benchmarks.
 34,983,320,195      instructions              #    0.85  insn per cycle
 ```
 
-And here are the results for our benchmark that integrates the boolean with the addition of a constant.
+And here are the counts for our optimized benchmark.
 
 ```
 12,341,422,456      instructions              #    2.84  insn per cycle
@@ -172,7 +237,9 @@ And here are the results for our benchmark that integrates the boolean with the 
 49,313,876,329      instructions              #    2.85  insn per cycle
 ```
 
-Let's try to understand the trends here. It's likely that the branch benchmarks are faster at smaller input sizes simply because we're doing less work (fewer instructions). However, when we misspeculate significantly (>11% misses, as we observed for the large input size), we're silently doing more work by having to rewind executed instructions and restart execution.
+It's likely that the branch benchmarks are faster at smaller input sizes simply because we're doing less work (fewer instructions). However, when we misspeculate significantly (>11% misses, as we observed for the large input size), we're silently doing more work by having to rewind executed instructions and restart execution.
+
+
 
 For our benchmark that multiplies the constant with a bool, our work scales linearly. This is because we're always performing the same operations, giving us ~100% correctly predicted branches. The largest size only beats the branch benchmark because the branch benchmark beats itself (due to misspeculation)!
 
