@@ -19,6 +19,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Vector Instructions]({% post_url 2020-04-23-vectorization %})
 
+- [Avoiding Branches]({% post_url 2020-04-30-avoiding-branches %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
