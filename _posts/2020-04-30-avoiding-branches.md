@@ -5,7 +5,7 @@ title: Avoiding Branches
 
 # Avoiding Branches
 
-Modern processors speculate whether or not a branche is taken, and target address of the next instruction. If a processor speculates incorrectly, it must rewind all incorrectly executed instructions, and continue down the correct control flow path. This can lead to significant performance problems when a branch is difficult to predict, and the processor misspeculates frequently. While the compiler can remove some branches using techniques like scalarization, many can only be removed with direct programmer intervention.
+Modern processors speculate whether or not a branch is taken, and target address of the next instruction. If a processor speculates incorrectly, it must rewind all incorrectly executed instructions, and proceed down the correct control-flow path. This can lead to significant performance problems when a branch is difficult to predict, and the processor misspeculates frequently. While the compiler can remove some branches using techniques like scalarization, many can only be removed by direct programmer-intervention.
 
 In this blog post, we'll be looking at how we can remove branches by integrating a condition with a mathematical operation. We will also be discussing value-dependant and type-dependant performance.
 
@@ -62,7 +62,7 @@ static void Bench(benchmark::State &s) {
 BENCHMARK(branchBench)->DenseRange(some_range);
 ```
 
-To set up the experiment, we create a vector of boolean values, and initialize them using a pseudo-random number generator. Inside of our main benchmarking loop, we're going to be testing the performance of conditionally adding a constant value to our `sink` variable. `sink` was dynamically allocated to keep it from being removed by the compiler, but retain the optimizations that were disabled when I marked it as `volatile` or with `benchmark::DoNotOptimize(...)`. We'll various input sizes (all powers of two).
+To set up the experiment, we create a vector of boolean values, and initialize them using a pseudo-random number generator. Inside of our main benchmarking loop, we're going to be testing the performance of conditionally adding a constant value to our `sink` variable. `sink` was dynamically allocated to keep it from being removed by the compiler, but retain the optimizations that were disabled when I marked it as `volatile` or with `benchmark::DoNotOptimize(...)`. We'll test various input sizes (all powers of two).
 
 ## Getting to a Baseline Benchmark
 
@@ -112,11 +112,11 @@ Let's take a look at some branch predicition statistics to see how things differ
 1,367,006,312   branch-misses             #   11.06% of all branches
 ```
 
-_Very_ unexpected results. We'd expect that our branch predictor would always do a poor job with our benchmark when the input data is random. However, it seems to work well for smaller vector sizes (at least for N < 2^12). Do we blame the random number generator? Probably not. We're already not using `std::mt19937` instead of `rand()`. What we should think about is the way Google Benchmark runs our code.
+_Very_ unexpected results. We'd expect that our branch predictor would always do a poor job with our benchmark when the input data is random. However, it seems to do a good job when our input vector size is small (N < 2^12). Do we blame the random number generator? Probably not. We're already using `std::mt19937` instead of `rand()`. What we should be thinking about is the way Google Benchmark runs our code.
 
-The benchmark will repeat whatever is in the `for (auto _ : s )` loop until either some internal measurements stabilize, or a fixed time or number of iterations has completed. However, our random number generation occurs outside this loop. While we may have high-quality random numbers, and are averaging timing across millions of runs, each run is using *the exact same random numbers*. That means each iteration of the `for (auto _ : s)` loop will have the exact same branch outcomes, and the branch predictor unit eventually learns them.
+The benchmark will repeat whatever is in the `for (auto _ : s )` loop until either some internal measurements stabilize, or a fixed time or number of iterations has completed. However, our random number generation occurs outside this loop. While we may have high-quality random numbers and are averaging timing across millions of iterations, each iteration is using *the exact same random numbers*. That means each iteration of the `for (auto _ : s)` loop will have the exact same branch outcomes, and the branch predictor unit eventually learns what they are.
 
-We can test this hypothesis using a two more benchmarks. We'll now look at `branchBenchFalse` and `branchBenchTrue`. In these benchmarks, our loop either never adds the constant value to `sink`, or always does. This should be a trivial for our branch predictor unit to learn. Here are the timing results for the smallest vector size (2^10).
+We can test this hypothesis using two more benchmarks. We'll now look at `branchBenchFalse` and `branchBenchTrue`. In these benchmarks, our loop either never adds the constant value to `sink`, or always does. This should be a trivial for our branch predictor unit to learn. Here are the timing results for the smallest vector size (2^10).
 
 ```
 ----------------------------------------------------------------
@@ -125,7 +125,6 @@ Benchmark                      Time             CPU   Iterations
 branchBenchFalse/10         1198 ns         1198 ns      2339510
 branchBenchTrue/10          1761 ns         1761 ns      1589511
 branchBenchRandom/10         842 ns          842 ns      3283319
-
 ```
 
 And here are the number of branch misses.
@@ -136,7 +135,7 @@ True:       1,145,795      branch-misses          #    0.04% of all branches
 Random:     2,379,407      branch-misses          #    0.08% of all branches
 ```
 
-`branchBenchFalse` and `branchBenchTrue` should have almost no misses because the because the branch always goes a single direction. `branchBenchRandom` has nearly 0 misses as well. This is because branch predictor unit learns the branch outcomes from multiple iterations of our benchmark that all use the same input data.
+`branchBenchFalse` and `branchBenchTrue` should have almost no misses because the because the branch always goes a single direction. `branchBenchRandom` has nearly 0 misses as well. This is because branch predictor unit learns the branch outcomes from first few iterations of our benchmark (that all use the same input data).
 
 Branch predictor units (BPUs) are effective, but have their limits (i.e., the have a fixed amount of storage for branch history and targets). For our benchmark, it can "remember" the results of 2^10 and 2^11 iterations, but does a poor job with 2^12. Let's compare the results of the three benchmarks for the largest vector size. 
 
@@ -157,11 +156,11 @@ And here are the number of branch misses.
 Random: 1,352,117,345      branch-misses          #   11.00% of all branches
 ```
 
-Still almost 0 misses for our false and true benchmarks, but a significant number for our random one! Since our benchmark uses the same vector of booleans each iteration, we need to ensure that vector is of a sufficient size such that the the BPU can't easily learn the outcomes from previous iterations. Otherwise our input is no longer "random", just a preset pattern that can be memorized.
+Still almost 0 misses for our false and true benchmarks, but a significant number for our random one! Since our benchmark uses the same vector of booleans each iteration, we need to ensure that vector is of a sufficient size such that the the BPU can't easily learn the outcomes from previous iterations. Otherwise our input is no longer "random", just a pattern that can be "memorized".
 
 But wait! We're skipped over another interesting result. Our `branchBenchRandom` was faster than `branchBenchFalse` for small vector sizes! `branchBenchRandom` sometimes skips adding our constant value to `sink`, so while we may expect it to be faster than `branchBenchTrue` (which always performs the addition), we would expect it to be slower than `branchBenchFalse` (that never performs the addition)!
 
-Modern Intel pipelines can get instructions from a Decoded Stream Buffer (DSB), or a slower Micro Instruction Trace Enginer (MITE). Let's see which one is providing the uops to our processor's backend. Here are the results for `branchBenchFalse`.
+Modern Intel pipelines can get uops from a Decoded Stream Buffer (DSB), or a slower Micro Instruction Trace Enginer (MITE). Let's see which one is providing the uops to our processor's backend. Here are the results for `branchBenchFalse`.
 
 ```
      2,265,959,520      idq.dsb_uops                                                
@@ -192,7 +191,7 @@ branchBenchRandom/14       69.2 us         69.2 us        40548
 
 One way we can remove a branch is by integrating a boolean's value into an expression. Multiplication and addition are cheap (compared to miss-speculation) so we may see a performance improvement by always performing these operations instead of conditionally skipping them.
 
-Let's remove the branch by multiplying the constant, 41, by the boolean (1 or 0. Here's the inner benchmark loop.
+Let's remove the branch by multiplying the constant, 41, by the boolean (1 or 0). Here's the inner benchmark loop.
 
 ```cpp
 // Benchmark main loop
@@ -212,7 +211,7 @@ boolBenchNonPower/13       8.09 us         8.09 us       345301
 boolBenchNonPower/14       16.1 us         16.1 us       173933
 ```
 
-More interesting results! We seem to be slightly worse than the benchmark using a branch for vector sizes 2^10 and 2^11, but over 4x better at the large size (2^12)! Let's look at the assembly to understand how this loop differs.
+We're about 3 (or more) times faster! Let's look at the assembly to what the low-level differences are.
 
 ```asm
  20.35 │1c8:┌─→shlx   %rax,%rbx,%rdx                                               ▒
@@ -230,7 +229,7 @@ More interesting results! We seem to be slightly worse than the benchmark using 
 
 ```
 
-Some new code! We're extracting the boolean through `shlx` + `and` + `setne`, and using a combination of `movzbl` + `lea` + `add` to perform `*sink += 41 * b;`. Let's look at the instruction counts for our benchmark.
+Some new code! We're extracting the boolean through `shlx` + `and` + `setne`, and using a combination of `movzbl` + `lea` + `add` to perform `*sink += 41 * b;`.
 
 ## Value-Dependent Performance
 
@@ -271,7 +270,7 @@ Even more interesting results! Our performance improved by adding a power of 2 v
 
 ```
 
-For our inner-loop, we've replaced the `lea` instructions for computing the value 41 with a left shift of the boolean (either 0 or 1) by 5 using `shl`, which creates a value of 32 if the boolean was true (1). We don't have any new branches in our code, and now we're executing fewer instructions than the case where we added 41.
+For our inner-loop, we've replaced the `lea` instructions that compute the value 41 with a left shift of the boolean (either 0 or 1) by 5 using `shl`, which creates a value of 32 if the boolean was true (1). We still removed the branch, and now we're executing fewer instructions.
 
 Let's take a look at instruction counts of the two benchmarks Here are the previous results from adding 41 (for a set number of iterations).
 
@@ -289,11 +288,11 @@ And here are the results for when we add a power of two.
 36,161,678,782      instructions
 ```
 
-Unsuprising results. We decreased the number of instructions executed in our inner-loop, which decreased out total number of instructions executed, and decreased execution time. To make ths statement, we have to use the assumption that the time it takes to execute our instructions our roughly equivilant. This assumption works decently well when comparing these two loops because they are so similar, and we don't have any extroadinarily expensive operations (like `idiv`) that breaks this assumption.
+Unsuprising results. We decreased the number of instructions executed in our inner-loop, which decreased out total number of instructions executed, and decreased execution time. To make this statement, we have to use the assumption that the time it takes to execute instructions is roughly equivilant. This assumption works decently well when comparing these two loops because they are quite similar, and we don't have any extroadinarily expensive operations (like `idiv`) that would obviously break this assumption.
 
 Another scenario we can explore is when the value we are conditionally adding is not known at compile-time. Let's take a look at what happens we change this to be a run-time value. For simplicity, I'll just use a value from `DenseRange` (10, 11, and 12). The important thing here is not the actual value of the number, just that the compiler does not know the value at compile-time.
 
-Here is what the inner-loop looks like. The compiler should be smart enough to hoist loop-invariants, like the value loaded by s.range(0). If you're unsure, you could always just use something like `rand()` to get a random number to add.
+Here is what the inner-loop looks like. The compiler should be smart enough to hoist loop-invariants, like the value loaded by `s.range(0)`. If you're unsure, you could always just use something like `rand()` to get a random number to add.
 
 ```cpp
 // Benchmark main loop
@@ -329,9 +328,9 @@ Slower than adding a power of two. Let's see why by looking at the assembly.
   9.02 │     ↑ jne    1be
 ```
 
-Our assembly closely resembles our high-level C++. We extract a boolean that was stored as a bit, check the condition, then multiply the result with our run-time input, and add it to `sink`. We seem to have the same number of instructions as the power of two input case (that used a shift), but let's measure the numbers just to be sure (using a constant number of iterations again.
+Our assembly closely resembles our high-level C++. We extract a boolean that was stored as a bit, check the condition, then multiply the result with our run-time input, and add it to `sink`. We seem to have the same number of instructions as the power of two input case (that used a shift), but let's measure the numbers just to be sure (using a constant number of iterations again).
 
-Here are the number of instructions counts again for the power of two value known at compile-time.
+Here are the number of instructions counts again for the power-of-two value known at compile-time.
 
 ```
  9,045,005,043      instructions
@@ -367,7 +366,7 @@ Our performance using an `imul` to conditionally add a value to `sink` is faster
 
 ## Data-Size-Dependant Performance
 
-We just saw how the compiler's knowledge of a value can change both the generated assembly and performance of an application. Unsurprisingly, the data types we use can have a similar effect. One thing to consider is the space they take up. Let's look at the size of a 2^12 vector storing booleans, chars, and integers. Here are some results I collected on my machine.
+We just saw how the compiler's knowledge of a value can change both the generated assembly and performance of an application. Unsurprisingly, the data types can have a similar effect. One thing to consider is the space they take up. Let's look at the size of a 2^12 vector storing booleans, chars, and integers. Here are some results I collected on my machine.
 
 ```
 std::vector<bool> w/ 4096 elements = 512B!
@@ -390,7 +389,7 @@ intBenchNonPower/13      0.709 us        0.709 us      3960530
 intBenchNonPower/14       1.83 us         1.82 us      1593989
 ```
 
-Whoah! That's almost 10x faster than our previous best results! Let's go ahead and take a look at the assembly to see why.
+Whoah! That's roughly 10x faster than our previous best results! Let's go ahead and take a look at the assembly to see why.
 
 ```asm
   1.48 │398:┌─→vmovdqu (%rax),%ymm1                                        ▒
@@ -404,9 +403,9 @@ Whoah! That's almost 10x faster than our previous best results! Let's go ahead a
   0.19 │    └──jne    398                                                  ▒
 ```
 
-Our compiler vectorized the code for us! In our previous benchmarks, the compiler could not vectorize the code because all the booleans were packed in a bit-vector. Each bit therefore has to be extracted using shift and `and` operations. When we're using integers, we don't have this problem, and the compiler can extrace multiple integers that we're using to store booleans using a vector memory operation like `vmovdqu`.
+Our compiler vectorized the code for us! In our previous benchmarks, the compiler could not vectorize the code because all the booleans were packed in a bit-vector. Each bit therefore has to be extracted using shift and `and` operations. When we're using integers, we don't have this problem, and the compiler can extract multiple integers that we're using to store booleans using a vector memory operation like `vmovdqu`.
 
-However, we didn't quite make and apples-to-apples comparison. It's not a surprising conclusion exploiting data parallelism can speed up an application. However, the compiler may not want to be able to vectorize this operation for some reason (like aliasing) in a real application. Let's take a step back and and re-run the test with vectorization disabled. All we need to do is add the `-fno-tree-vectorize` to our compiler flags. 
+However, we didn't quite make and apples-to-apples comparison. It's not a surprising conclusion that exploiting data parallelism can speed up an application. However, the compiler may not want to be able to vectorize this operation for some reason (like aliasing) in a real application. Let's take a step back and and re-run the test with vectorization disabled. All we need to do is add the `-fno-tree-vectorize` to our compiler flags. 
 
 Here were the results.
 
@@ -433,7 +432,7 @@ Significantly faster than using a boolean, but definitely not the 10x speedup fr
 
 Very similar to `boolBenchNonPower`, except we can use the input boolean stored in an integer directly instead of having to extract the condition value from a bit-vector! This likely accounts for the small improvement in performance over the equivilant code for a bool. We also see the same compiler optimization of using `lea` instructions instead of `imul` to conditionally add a constant value of 41 to `sink`.
 
-Let's explore the same train of thought we did for out boolean benchmarks. We'll look at two more benchmarks. One that adds a power-of-two constant, and another that adds a value known only at run-time. For both of these cases, we'll be using a vector of integers again. Here were the results.
+Let's explore the same train of thought we did for out boolean benchmarks. We'll look at two more benchmarks. One that adds a power-of-two constant, and another that adds a value known only at run-time. For both of these cases, we'll be using a vector of integers. Here are the results.
 
 ```
 -----------------------------------------------------------
@@ -473,11 +472,11 @@ Here is the assembly when a constant with a value only known at run-time.
 
 All we're doing is multiplying the input variable by the run-time constant, and adding the result to `sink`.
 
-An interesting result here is that again, our generalized implementation (using `imul`) seems outperform clever specializations by the compiler (like using `lea` and even `shlx` in this case).
+An interesting result here is that again, our generalized implementation (using `imul`) seems outperform clever specializations by the compiler (like using `lea` and even `shlx` in this case). Both implementations are also faster than adding a non-power-of-two.
 
 To change gears, we are going to re-focus on type-based performance differences. We saw that with an integer we get performance improvement from vectorization or not having to unpack boolean bit from a bit-vector. However, we're only using 1/32 bits in an integer. If we're only using the values 1 and 0, we could use a smaller data type. Let's use a char! It's 1/4 the size of an integer, and also will not require bit-shifting and mask operations to extract the value (as needed with the bit-vector).
 
-Let's re-enable vectorization and try a vector of chars with the value of either 0 or 1. Here were my performance numbers.
+Let's re-enable vectorization and try a vector of chars that only hold the values 0 or 1. Here were my performance numbers.
 
 ```
 ---------------------------------------------------------------
@@ -515,7 +514,7 @@ Very similar results to using an integer, and even slightly better at the larges
 
 Vectorization again, but significantly more instructions than with an integer. This is likely because each 128-bit register can now hold 16 booleans stored as chars instead of only 4 booleans stored as integers. While we have more instruction, we're processing many more elements each iteration of the loop.
 
-Let's take a step back and disable vectorization to make an apples-to-apples comparison. Here are my three results.
+Let's take a step back and disable vectorization to make an apples-to-apples comparison. Here are my three results (for a non-power-of-two, a power-of-two, and a run-time value input).
 
 ```
 ---------------------------------------------------------------
@@ -533,7 +532,7 @@ charBenchInput/14          7.76 us         7.76 us       356929
 
 ```
 
-Similar performance to using integers, but with 1/4 the storage requirement (And slightly faster in some cases)! Let's take a quick look at the instructions to see if we can understand why. 
+Similar performance to using integers, but with 1/4 the storage requirement (and slightly faster in some cases)! Let's take a quick look at the instructions to see if we can understand why. 
 
 Here is for our non power of two constant.
 
@@ -571,7 +570,7 @@ And finally, for the run-time value.
  14.09 │    └──jne    330                                        ▒
 ```
 
-Very similar code! Furthermore, the compiler's choice of using `lea` instead of `imul` seems to be a poor choice. While we _can_ see performance improvements with specializations (as seen with the power-of-two inputs), using `imul` generally seems to be better than constructing the value using `lea` instructions.
+Very similar code to what we saw for integers! Any performance differece is likely coming from our smaller usage of memory. Furthermore, the compiler's choice of using `lea` instead of `imul` again seems to be a poor choice. While we _can_ see performance improvements with specializations (as seen with the power-of-two inputs), using `imul` generally seems to be better than constructing the value using `lea` instructions.
 
 As a reminder, here were the results from our original branch benchmarks.
 
@@ -584,13 +583,13 @@ branchBenchRandom/13       31.8 us         31.8 us        88274
 branchBenchRandom/14       69.2 us         69.2 us        40548
 ```
 
-It looks like we're seeing an almost 10x performance improvement (depending on the input size) by integrating the comparison in with the computation, and understanding the impact of value and data-type on performance. Pretty cool.
+It looks like we're seeing an almost 10x performance improvement (depending on the input size) by integrating the comparison in with the computation, and understanding the impact of values and data-types on performance. Pretty cool stuff.
 
 ## Concluding Remarks
 
-Many interesting results to think about! Our choice of values and data types can impact performance significantly. It also is a reminder for us to be vigilant about performance. Just because the compiler specializes a function because it knows a value at compile-time doesn't mean it's necessarily better for performance. This was the case for using `lea` instructions instead `imul` in these examples.
+Many interesting results to think about! Our choice of values and data types can impact performance significantly. It also is a reminder for us to be vigilant about performance. Just because the compiler specializes a function because it knows a value at compile-time doesn't mean it will be better performance. This was the case for using `lea` instructions instead `imul` in all three examples.
 
-Another important thing to consider is how we benchmark code. I've seen latge C++ conference talks fall for our baseline pitfall of using the same random numbers each iteration. Furthermore, I found huge performance variation (>10%) depending on which benchmarks were located in the same files, and which settings were enabled (e.g., the number of iterations). So be careful. Even if you're measuring using great tools, that doesn't mean there isn't issues hiding elsewhere in your benchmarks.
+Another important thing to consider is how we benchmark code. I've seen large C++ conference talks fall for our baseline pitfall of using the same random numbers each iteration. Furthermore, I found huge performance variation (>10%) depending on which benchmarks were located in the same file, and which settings were enabled (e.g., the number of iterations). So be careful. Even if you're measuring using great tools, that doesn't mean there isn't issues hiding elsewhere in your benchmarks.
 
 As always, feel free to contact me with questions. 
 
