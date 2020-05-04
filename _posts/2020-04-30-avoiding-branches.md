@@ -21,7 +21,7 @@ In this blog post, we'll be looking at how we can remove branches by integrating
 All the benchmarks used in this blog post can be found [here](https://github.com/CoffeeBeforeArch/misc_code/blob/master/conditions), and were writting using [Google Benchmark](https://github.com/google/benchmark). Below is the command I used to compile the benchmarks.
 
 ```bash
-g++ conditions.cpp -O3 -lbenchmark -lpthread -march=native -mtune=native
+g++ bench_name.cpp -O3 -lbenchmark -lpthread -march=native -mtune=native
 ```
 
 Additionally, there is a short program that prints out the sizes of some dynamic allocations by overloading the `new` operator. That can be compiled as follows.
@@ -62,7 +62,7 @@ static void Bench(benchmark::State &s) {
 BENCHMARK(branchBench)->DenseRange(some_range);
 ```
 
-To set up the experiment, we create a vector of boolean values, and initialize them using a pseudo-random number generator. Inside of our main benchmarking loop, we're going to be testing the performance of conditionally adding a constant value to our `sink` variable. `sink` was dynamically allocated to keep it from being removed by the compiler, but retain the optimizations that were disabled when I marked it as `volatile` or with `benchmark::DoNotOptimize(...)`. We'll test various input sizes (all powers of two).
+For each benchmark, we create a vector of boolean values, and initialize them using a pseudo-random number generator. Inside of our main benchmarking loop, we're going to be testing the performance of conditionally adding a constant value to our `sink` variable. `sink` was dynamically allocated to keep it from being removed by the compiler, but retain the optimizations that were disabled when I marked it as `volatile` or with `benchmark::DoNotOptimize(...)`. We'll test various input sizes (all powers of two).
 
 ## Getting to a Baseline Benchmark
 
@@ -163,15 +163,15 @@ But wait! We're skipped over another interesting result. Our `branchBenchRandom`
 Modern Intel pipelines can get uops from a Decoded Stream Buffer (DSB), or a slower Micro-instruction Translation Engine (MITE). Let's see which one is providing the uops to our processor's backend. Here are the results for `branchBenchFalse`.
 
 ```
-     2,265,959,520      idq.dsb_uops                                                
-     3,368,665,296      idq.mite_uops                                               
+     2,265,959,520      idq.dsb_uops                      
+     3,368,665,296      idq.mite_uops                    
 ```
 
 And here are the results for `branchBenchRandom`.
 
 ```
-     6,294,916,475      idq.dsb_uops                                                
-        15,795,857      idq.mite_uops                                               
+     6,294,916,475      idq.dsb_uops                                 
+        15,795,857      idq.mite_uops                               
 ```
 
 Our random benchmark avoids many of the penalites in the legacy MITE pipeline, leading to slightly better performance, despite sometimes performing the addition. Our false benchmark seems to get most of its instructions from the MITE. We'll leave any further discussion of this issue to another blog post.
@@ -589,7 +589,7 @@ It looks like we're seeing an almost 10x performance improvement (depending on t
 
 Many interesting results to think about! Our choice of values and data types can impact performance significantly. It also is a reminder for us to be vigilant about performance. Just because the compiler specializes a function because it knows a value at compile-time doesn't mean it will be better performance. This was the case for using `lea` instructions instead `imul` in all three examples.
 
-Another important thing to consider is how we benchmark code. I've seen large C++ conference talks fall for our baseline pitfall of using the same random numbers each iteration. Furthermore, I found huge performance variation (>10%) depending on which benchmarks were located in the same file, and which settings were enabled (e.g., the number of iterations). So be careful. Even if you're measuring using great tools, that doesn't mean there isn't issues hiding elsewhere in your benchmarks.
+Another important thing to consider is how we benchmark code. I've seen large C++ conference talks fall for our baseline pitfall of using the same random numbers each iteration. Furthermore, I found huge performance variation (>10%) depending on which benchmarks were located in the same file, and which settings were enabled (e.g., the number of iterations). So be careful. Even if you're measuring using great tools, that doesn't mean there are not other issues hiding in your benchmarks.
 
 As always, feel free to contact me with questions.
 
