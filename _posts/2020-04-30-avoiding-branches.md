@@ -160,7 +160,7 @@ Still almost 0 misses for our false and true benchmarks, but a significant numbe
 
 But wait! We're skipped over another interesting result. Our `branchBenchRandom` was faster than `branchBenchFalse` for small vector sizes! `branchBenchRandom` sometimes skips adding our constant value to `sink`, so while we may expect it to be faster than `branchBenchTrue` (which always performs the addition), we would expect it to be slower than `branchBenchFalse` (that never performs the addition)!
 
-Modern Intel pipelines can get uops from a Decoded Stream Buffer (DSB), or a slower Micro Instruction Trace Enginer (MITE). Let's see which one is providing the uops to our processor's backend. Here are the results for `branchBenchFalse`.
+Modern Intel pipelines can get uops from a Decoded Stream Buffer (DSB), or a slower Micro-instruction Translation Engine (MITE). Let's see which one is providing the uops to our processor's backend. Here are the results for `branchBenchFalse`.
 
 ```
      2,265,959,520      idq.dsb_uops                                                
@@ -591,7 +591,7 @@ Many interesting results to think about! Our choice of values and data types can
 
 Another important thing to consider is how we benchmark code. I've seen large C++ conference talks fall for our baseline pitfall of using the same random numbers each iteration. Furthermore, I found huge performance variation (>10%) depending on which benchmarks were located in the same file, and which settings were enabled (e.g., the number of iterations). So be careful. Even if you're measuring using great tools, that doesn't mean there isn't issues hiding elsewhere in your benchmarks.
 
-As always, feel free to contact me with questions. 
+As always, feel free to contact me with questions.
 
 Cheers,
 
