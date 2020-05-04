@@ -59,12 +59,12 @@ static void Bench(benchmark::State &s) {
   // Free our memory
   delete sink;
 }
-BENCHMARK(branchBench)->DenseRange(10, 12);
+BENCHMARK(branchBench)->DenseRange(some_range);
 ```
 
-To set up the experiment, we create a vector of boolean values, and initialize them using a pseudo-random number generator. Inside of our main benchmarking loop, we're going to be testing the performance of conditionally adding a constant value to our `sink` variable. `sink` was dynamically allocated to keep it from being removed by the compiler, but retain the optimizations that were disabled when I marked it as `volatile` or with `benchmark::DoNotOptimize(...)`. We'll be testing input vector sizes of 2^10, 2^11, and 2^12 elements.
+To set up the experiment, we create a vector of boolean values, and initialize them using a pseudo-random number generator. Inside of our main benchmarking loop, we're going to be testing the performance of conditionally adding a constant value to our `sink` variable. `sink` was dynamically allocated to keep it from being removed by the compiler, but retain the optimizations that were disabled when I marked it as `volatile` or with `benchmark::DoNotOptimize(...)`. We'll various input sizes (all powers of two).
 
-## Baseline Benchmark
+## Getting to a Baseline Benchmark
 
 For our baseline, we will simply use an if-statement to conditionally add a value to our `sink` variable.
 
@@ -157,7 +157,7 @@ True:       1,373,892      branch-misses          #    0.01% of all branches
 Random: 1,352,117,345      branch-misses          #   11.00% of all branches
 ```
 
-Still almost 0 misses for our false and true benchmarks, but a significant number for our random one! Since our benchmark uses the same vector of booleans each iteration, we need to ensure that vector is of a sufficient size such that the the BPU can't easily learn the outcomes from previous iterations.
+Still almost 0 misses for our false and true benchmarks, but a significant number for our random one! Since our benchmark uses the same vector of booleans each iteration, we need to ensure that vector is of a sufficient size such that the the BPU can't easily learn the outcomes from previous iterations. Otherwise our input is no longer "random", just a preset pattern that can be memorized.
 
 But wait! We're skipped over another interesting result. Our `branchBenchRandom` was faster than `branchBenchFalse` for small vector sizes! `branchBenchRandom` sometimes skips adding our constant value to `sink`, so while we may expect it to be faster than `branchBenchTrue` (which always performs the addition), we would expect it to be slower than `branchBenchFalse` (that never performs the addition)!
 
@@ -175,7 +175,18 @@ And here are the results for `branchBenchRandom`.
         15,795,857      idq.mite_uops                                               
 ```
 
-Our random benchmark avoids many of the penalites in the legacy MITE pipeline, leading to slightly better performance, despite sometimes performing the addition. However, we'll leave further discussion of this issue to another blog post.
+Our random benchmark avoids many of the penalites in the legacy MITE pipeline, leading to slightly better performance, despite sometimes performing the addition. Our false benchmark seems to get most of its instructions from the MITE. We'll leave any further discussion of this issue to another blog post.
+
+Our key takeaway from this section should be our baseline benchmark results. Vector sizes of 2^10 and 2^11 don't work because the BPU can learn the branch outcomes. We'll therefore be using the sizes 2^12, 2^13, and 2^14. Here are the timing results (now in microseconds).
+
+```
+---------------------------------------------------------------
+Benchmark                     Time             CPU   Iterations
+---------------------------------------------------------------
+branchBenchRandom/12       13.1 us         13.1 us       214146
+branchBenchRandom/13       31.8 us         31.8 us        88274
+branchBenchRandom/14       69.2 us         69.2 us        40548
+```
 
 ## Multiplying by a Boolean
 
@@ -193,12 +204,12 @@ while (s.KeepRunning()) {
 We've completely removed the branch with the price of sometimes multiplying by 0. Here are the timing results.
 
 ```
---------------------------------------------------------------------
-Benchmark                          Time             CPU   Iterations
---------------------------------------------------------------------
-logicBenchBoolNonPower/10       1379 ns         1379 ns      2029115
-logicBenchBoolNonPower/11       2807 ns         2803 ns       955068
-logicBenchBoolNonPower/12       5482 ns         5481 ns       506292
+---------------------------------------------------------------
+Benchmark                     Time             CPU   Iterations
+---------------------------------------------------------------
+boolBenchNonPower/12       4.11 us         4.11 us       688606
+boolBenchNonPower/13       8.09 us         8.09 us       345301
+boolBenchNonPower/14       16.1 us         16.1 us       173933
 ```
 
 More interesting results! We seem to be slightly worse than the benchmark using a branch for vector sizes 2^10 and 2^11, but over 4x better at the large size (2^12)! Let's look at the assembly to understand how this loop differs.
@@ -219,33 +230,11 @@ More interesting results! We seem to be slightly worse than the benchmark using 
 
 ```
 
-Some new code! We're extracting the boolean through `shlx` + `and` + `setne`, but using a combination of `movzbl` + `lea` + `add` to perform `*sink += 41 * b;`. But are we only faster for the largest input size? Let's start by understanding the amount of work each benchmark does. We'll be using instruction count as a proxy for work done. While different instructions do not have the same overhead, we're looking at fairly similar inner-loops, and the instructions are mostly cheap arithmetic operations. We'll start with the simplifying assumption that the benchmark executing fewer instructions should be faster.
-
-Here are the counts for the branch benchmarks.
-
-```
-8,754,489,905       instructions              #    3.26  insn per cycle
-17,512,225,151      instructions              #    2.87  insn per cycle
-34,983,320,195      instructions              #    0.85  insn per cycle
-```
-
-And here are the counts for our optimized benchmark.
-
-```
-12,341,422,456      instructions              #    2.84  insn per cycle
-24,663,237,309      instructions              #    2.85  insn per cycle
-49,313,876,329      instructions              #    2.85  insn per cycle
-```
-
-It's likely that the branch benchmarks are faster at smaller input sizes simply because we're doing less work (fewer instructions). However, when we misspeculate significantly (>11% misses, as we observed for the large input size), we're silently doing more work by having to rewind executed instructions and restart execution.
-
-
-
-For our benchmark that multiplies the constant with a bool, our work scales linearly. This is because we're always performing the same operations, giving us ~100% correctly predicted branches. The largest size only beats the branch benchmark because the branch benchmark beats itself (due to misspeculation)!
+Some new code! We're extracting the boolean through `shlx` + `and` + `setne`, and using a combination of `movzbl` + `lea` + `add` to perform `*sink += 41 * b;`. Let's look at the instruction counts for our benchmark.
 
 ## Value-Dependent Performance
 
-Not all constants are treated equally! For both of the previous benchmarks, we've been conditionally adding 41 to out `sink` variable. Let's change our benchmark to add 32 (a power of 2) to the sink variable. Here are the only changes to the inner-loop.
+Not all constants are treated equally! For both of the previous benchmarks, we've been conditionally adding 41 to our `sink` variable. Let's change our benchmark to add 32 (a power of 2) to the sink variable. Here are the only changes to the inner-loop.
 
 ```cpp
 // Benchmark main loop
@@ -257,12 +246,12 @@ while (s.KeepRunning()) {
 Let's take a look at the execution times.
 
 ```
------------------------------------------------------------------
-Benchmark                       Time             CPU   Iterations
------------------------------------------------------------------
-logicBenchBoolPower/10        919 ns          919 ns      3141008
-logicBenchBoolPower/11       1788 ns         1788 ns      1546853
-logicBenchBoolPower/12       3554 ns         3554 ns       784270
+------------------------------------------------------------
+Benchmark                  Time             CPU   Iterations
+------------------------------------------------------------
+boolBenchPower/12       3.42 us         3.42 us       819065
+boolBenchPower/13       6.91 us         6.91 us       410612
+boolBenchPower/14       14.2 us         14.2 us       196806
 ```
 
 Even more interesting results! Our performance improved by adding a power of 2 value instead of 41. Let's go ahead and take a look at the assembly.
@@ -282,29 +271,29 @@ Even more interesting results! Our performance improved by adding a power of 2 v
 
 ```
 
-For our inner-loop, we're setting the lower value of `%edx` based on the boolean, and shifting that value (either 0 or 1) by 5 using `shl`, which creates a value of 32 if the boolean was true (1). We don't have any new branches in our code, and now we're executing fewer instructions than the case where we added 41.
+For our inner-loop, we've replaced the `lea` instructions for computing the value 41 with a left shift of the boolean (either 0 or 1) by 5 using `shl`, which creates a value of 32 if the boolean was true (1). We don't have any new branches in our code, and now we're executing fewer instructions than the case where we added 41.
 
-Let's take a look at instruction count information again. Here are the previous results from adding 41.
+Let's take a look at instruction counts of the two benchmarks Here are the previous results from adding 41 (for a set number of iterations).
 
 ```
-12,341,422,456      instructions              #    2.84  insn per cycle
-24,663,237,309      instructions              #    2.85  insn per cycle
-49,313,876,329      instructions              #    2.85  insn per cycle
+ 9,863,822,693      instructions
+19,721,451,501      instructions
+39,439,292,114      instructions
 ```
 
 And here are the results for when we add a power of two.
 
 ```
-11,316,660,610      instructions              #    4.27  insn per cycle
-22,614,193,920      instructions              #    4.27  insn per cycle
-45,208,283,098      instructions              #    4.30  insn per cycle
+ 9,045,005,043      instructions
+18,083,435,007      instructions
+36,161,678,782      instructions
 ```
 
-Unsuprising results. We decreased the number of instructions in our inner-loop, which decreased out total number of instructions executed, and decreased execution time. Note, we're still relying on our assumption that our inner-loops are very similar, and that the time all the arithmetic instructions we're looking at take roughly the same amount of time.
+Unsuprising results. We decreased the number of instructions executed in our inner-loop, which decreased out total number of instructions executed, and decreased execution time. To make ths statement, we have to use the assumption that the time it takes to execute our instructions our roughly equivilant. This assumption works decently well when comparing these two loops because they are so similar, and we don't have any extroadinarily expensive operations (like `idiv`) that breaks this assumption.
 
-Another use-case we can explore is when the value we are conditionally adding is not known at compile-time. Let's take a look at what happens we change this to be a run-time value. For simplicity, I'll just use a value from `DenseRange` (10, 11, and 12).
+Another scenario we can explore is when the value we are conditionally adding is not known at compile-time. Let's take a look at what happens we change this to be a run-time value. For simplicity, I'll just use a value from `DenseRange` (10, 11, and 12). The important thing here is not the actual value of the number, just that the compiler does not know the value at compile-time.
 
-Here is what the inner-loop looks like. The compiler should be smart enough to hoist loop-invariants, like the value loaded by s.range(0). If you're unsure, you could always just use something like `rand()` to get a random number.
+Here is what the inner-loop looks like. The compiler should be smart enough to hoist loop-invariants, like the value loaded by s.range(0). If you're unsure, you could always just use something like `rand()` to get a random number to add.
 
 ```cpp
 // Benchmark main loop
@@ -316,15 +305,15 @@ while (s.KeepRunning()) {
 And here were the performance numbers.
 
 ```
------------------------------------------------------------------
-Benchmark                       Time             CPU   Iterations
------------------------------------------------------------------
-logicBenchBoolInput/10       1128 ns         1128 ns      2512900
-logicBenchBoolInput/11       2224 ns         2224 ns      1239874
-logicBenchBoolInput/12       4485 ns         4485 ns       629310
+------------------------------------------------------------
+Benchmark                  Time             CPU   Iterations
+------------------------------------------------------------
+boolBenchInput/12       3.90 us         3.90 us       720875
+boolBenchInput/13       7.82 us         7.82 us       360674
+boolBenchInput/14       15.6 us         15.6 us       178741
 ```
 
-Let's take a look at assembly.
+Slower than adding a power of two. Let's see why by looking at the assembly.
 
 ```asm
  13.83 │1be:   shlx   %rax,%rbx,%rdx
@@ -340,22 +329,22 @@ Let's take a look at assembly.
   9.02 │     ↑ jne    1be
 ```
 
-Now our assembly closely resembles what our high-level C++ does. We extract a boolean that was stored as a bit, check the condition, then multiply the result with our run-time value (stored in a register), and add it to `sink`. We seem to have the same number of instructions as the power of two input (that used a shift), but let's measure the numbers just to be sure.
+Our assembly closely resembles our high-level C++. We extract a boolean that was stored as a bit, check the condition, then multiply the result with our run-time input, and add it to `sink`. We seem to have the same number of instructions as the power of two input case (that used a shift), but let's measure the numbers just to be sure (using a constant number of iterations again.
 
-Here are the number of instructions executed when we were adding a power of two value that is known at compile-time.
+Here are the number of instructions counts again for the power of two value known at compile-time.
 
 ```
-11,316,660,610      instructions              #    4.27  insn per cycle
-22,614,193,920      instructions              #    4.27  insn per cycle
-45,208,283,098      instructions              #    4.30  insn per cycle
+ 9,045,005,043      instructions
+18,083,435,007      instructions
+36,161,678,782      instructions
 ```
 
 And here are the results when the value is only known at run-time.
 
 ```
-11,307,458,507      instructions              #    3.26  insn per cycle
-22,588,609,872      instructions              #    3.25  insn per cycle
-45,153,939,781      instructions              #    3.27  insn per cycle
+ 9,046,302,760      instructions
+18,084,190,742      instructions
+36,160,339,674      instructions
 ```
 
 Roughly the same instruction count! Now we have to give up our assumption that arithmetic instructions take approximately the same time. However, we can farily easily root-cause the issue by looking `imul` and `shl` instructions in Agner Fog's [instruction tables](https://www.agner.org/optimize/instruction_tables.pdf). For my processor, `imul` takes 3-4c (depending on the inputs), and that `shl` takes only 0.5c (for the case of a register and immediate input). A likely explanation for why our performance decreased.
@@ -364,14 +353,14 @@ But wait! Let's look at the timing results of the non-power of two input and run
 
 ```
 --------------------------------------------------------------------
-Benchmark                          Time             CPU   Iterations
+Benchmark                     Time             CPU   Iterations
 --------------------------------------------------------------------
-logicBenchBoolNonPower/10       1379 ns         1379 ns      2029115
-logicBenchBoolNonPower/11       2807 ns         2803 ns       955068
-logicBenchBoolNonPower/12       5482 ns         5481 ns       506292
-logicBenchBoolInput/10          1102 ns         1102 ns      2549754
-logicBenchBoolInput/11          2194 ns         2194 ns      1277546
-logicBenchBoolInput/12          4358 ns         4358 ns       642253
+boolBenchNonPower/12       4.11 us         4.11 us       688606
+boolBenchNonPower/13       8.09 us         8.09 us       345301
+boolBenchNonPower/14       16.1 us         16.1 us       173933
+boolBenchInput/12          3.90 us         3.90 us       720875
+boolBenchInput/13          7.82 us         7.82 us       360674
+boolBenchInput/14          15.6 us         15.6 us       178741
 ```
 
 Our performance using an `imul` to conditionally add a value to `sink` is faster than the case where we're always adding the same constant (42) using `lea` instructions. Looks like we found at least one scenario where clever choices by the compiler are slower than the straight-forward solution.
