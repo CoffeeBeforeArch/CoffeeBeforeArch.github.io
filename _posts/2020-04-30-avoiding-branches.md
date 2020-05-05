@@ -135,7 +135,7 @@ True:       1,145,795      branch-misses          #    0.04% of all branches
 Random:     2,379,407      branch-misses          #    0.08% of all branches
 ```
 
-`branchBenchFalse` and `branchBenchTrue` should have almost no misses because the because the branch always goes a single direction. `branchBenchRandom` has nearly 0 misses as well. This is because branch predictor unit learns the branch outcomes from first few iterations of our benchmark (that all use the same input data).
+`branchBenchFalse` and `branchBenchTrue` should have almost 0% misses because the branch always goes a single direction. `branchBenchRandom` has almost 0% misses as well. This is because branch predictor unit learns the branch outcomes from the first few iterations of our benchmark (that all use the same input data).
 
 Branch predictor units (BPUs) are effective, but have their limits (i.e., the have a fixed amount of storage for branch history and targets). For our benchmark, it can "remember" the results of 2^10 and 2^11 iterations, but does a poor job with 2^12. Let's compare the results of the three benchmarks for the largest vector size. 
 
@@ -156,7 +156,7 @@ And here are the number of branch misses.
 Random: 1,352,117,345      branch-misses          #   11.00% of all branches
 ```
 
-Still almost 0 misses for our false and true benchmarks, but a significant number for our random one! Since our benchmark uses the same vector of booleans each iteration, we need to ensure that vector is of a sufficient size such that the the BPU can't easily learn the outcomes from previous iterations. Otherwise our input is no longer "random", just a pattern that can be "memorized".
+Still almost 0% misses for our false and true benchmarks, but a significant number for our random one! Since our benchmark uses the same vector of booleans each iteration, we need to ensure that vector is of a sufficient size such that the the BPU can't easily learn the outcomes from previous iterations. Otherwise our input is no longer "random", just a pattern that can be "memorized".
 
 But wait! We're skipped over another interesting result. Our `branchBenchRandom` was faster than `branchBenchFalse` for small vector sizes! `branchBenchRandom` sometimes skips adding our constant value to `sink`, so while we may expect it to be faster than `branchBenchTrue` (which always performs the addition), we would expect it to be slower than `branchBenchFalse` (that never performs the addition)!
 
@@ -430,9 +430,9 @@ Significantly faster than using a boolean, but definitely not the 10x speedup fr
   0.08 │    └──jne    340                                             ▒
 ```
 
-Very similar to `boolBenchNonPower`, except we can use the input boolean stored in an integer directly instead of having to extract the condition value from a bit-vector! This likely accounts for the small improvement in performance over the equivilant code for a bool. We also see the same compiler optimization of using `lea` instructions instead of `imul` to conditionally add a constant value of 41 to `sink`.
+Very similar results as `boolBenchNonPower`, except we can use the input booleans stored as an integer directly instead of having to extract the condition from a bit-vector! This likely accounts for the small improvement in performance over the equivilant code for a bool (a reduction in instructions). We also see the same compiler optimization of using `lea` instructions instead of `imul` to conditionally add a constant value of 41 to `sink`.
 
-Let's explore the same train of thought we did for out boolean benchmarks. We'll look at two more benchmarks. One that adds a power-of-two constant, and another that adds a value known only at run-time. For both of these cases, we'll be using a vector of integers. Here are the results.
+Let's explore the same train of thought we did for out boolean-type benchmarks. We'll look at two more benchmarks. One will add a power-of-two constant, and the other adds a value known only at run-time. For both of these cases, we'll be using a vector of integers. Here are the results.
 
 ```
 -----------------------------------------------------------
@@ -570,7 +570,7 @@ And finally, for the run-time value.
  14.09 │    └──jne    330                                        ▒
 ```
 
-Very similar code to what we saw for integers! Any performance differece is likely coming from our smaller usage of memory. Furthermore, the compiler's choice of using `lea` instead of `imul` again seems to be a poor choice. While we _can_ see performance improvements with specializations (as seen with the power-of-two inputs), using `imul` generally seems to be better than constructing the value using `lea` instructions.
+Very similar code to what we saw for integers! Any performance difference Slikely coming from our reduction in memory usage. Furthermore, the compiler's choice of using `lea` instead of `imul` seems to be a poor choice (again). While we _can_ see performance improvements with specializations (as seen with the assembly generated for power-of-two inputs), using `imul` generally seems to be better than constructing the value using `lea` instructions.
 
 As a reminder, here were the results from our original branch benchmarks.
 
@@ -583,11 +583,11 @@ branchBenchRandom/13       31.8 us         31.8 us        88274
 branchBenchRandom/14       69.2 us         69.2 us        40548
 ```
 
-It looks like we're seeing an almost 10x performance improvement (depending on the input size) by integrating the comparison in with the computation, and understanding the impact of values and data-types on performance. Pretty cool stuff.
+It looks like we're seeing an almost 10x performance improvement (depending on the input size) by integrating the comparison in with the computation, and understanding the impact of values and data-types on performance (and over 40x w/ vectorization). Pretty cool stuff.
 
 ## Concluding Remarks
 
-Many interesting results to think about! Our choice of values and data types can impact performance significantly. It also is a reminder for us to be vigilant about performance. Just because the compiler specializes a function because it knows a value at compile-time doesn't mean it will be better performance. This was the case for using `lea` instructions instead `imul` in all three examples.
+Many interesting results to think about! Our choice of values and data types can impact performance significantly. It also is a reminder for us to be vigilant about performance. Just because the compiler specializes a function when it knows a value at compile-time doesn't mean it will perform better. This was the case for using `lea` instructions instead `imul` in all three examples.
 
 Another important thing to consider is how we benchmark code. I've seen large C++ conference talks fall for our baseline pitfall of using the same random numbers each iteration. Furthermore, I found huge performance variation (>10%) depending on which benchmarks were located in the same file, and which settings were enabled (e.g., the number of iterations). So be careful. Even if you're measuring using great tools, that doesn't mean there are not other issues hiding in your benchmarks.
 
