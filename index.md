@@ -21,6 +21,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Avoiding Branches]({% post_url 2020-04-30-avoiding-branches %})
 
+- [A Not So Fast Mod]({% post_url 2020-05-06-not-fast-mod %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
