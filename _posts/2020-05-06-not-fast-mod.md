@@ -25,7 +25,7 @@ g++ bench_name.cpp -O3 -lbenchmark -lpthread -march=native -mtune=native
 
 ## Baseline Modulo Performance
 
-- *"I want to briefly look at one other crazy example"*
+- *"I want to briefly look at one other crazy example"* - Chandler Carruth prior to this example
 
 Before we examine the modulo optimization in the video, we first need to re-gather the baseline data. For this, we'll start with base made. Here is the C++ code.
 
@@ -242,7 +242,7 @@ fastModHint/1024/224  1,008,987,160      arith.divider_active
 
 Unsuprisingly, when 7/8's our data does not perform the modulo, we have 1/7 the number of cycles of the divider unit being active.
 
-## "unstableMod Performance"
+## "unstableMod" Performance
 
 I'll now be introducing `slowMod`. This benchmark performs modulo even slower than than `baseMod` for all cases. Instead of starting out by explaining the C++, let's look at the performance results side-by-side with `baseMod`. I've also increased the vector sizes from (4096, 8192, and 16384). Here are the numbers for baseMod.
 
@@ -280,7 +280,7 @@ unstableMod/16384/224       41.3 us         41.3 us        68449
 
 Our `unstableMod` seems to be worse in most cases (sometimes by more than 2x), and better in only a small number. And now or the code reveal!
 
-```
+```cpp
 for (auto _ : s) {
   // DON'T compute the mod for each element
   // Skip the expensive operation using a simple compare
@@ -290,49 +290,51 @@ for (auto _ : s) {
 }
 ```
 
-Ta da! It's just `fastMod`. This seems... odd. Why did `fastMod` seem like a good idea at small vector sizes, but a terrible at large sizes? To explain this, we first need to look at the branch prediction rate. Here are branch misses for each input combination of `baseMod` for the original input sizes.
+Ta da! It's just `fastMod`. This seems... odd. Why did `fastMod` seem like a good idea at small vector sizes, but a terrible at large sizes? To explain this, we first need to look at the branch prediction rate. Here are branch miss percentages for `baseMod` using the original input sizes.
 
 ```
-baseMod/16/32       42,529          branch-misses             #    0.01% of all branches
-baseMod/16/128      51,761          branch-misses             #    0.01% of all branches                        
-baseMod/16/224      67,636          branch-misses             #    0.01% of all branches             
-baseMod/64/32       42,040          branch-misses             #    0.01% of all branches                     
-baseMod/64/128      47,719          branch-misses             #    0.01% of all branches                  
-baseMod/64/224      58,502          branch-misses             #    0.02% of all branches             
-baseMod/256/32      1,182,454       branch-misses             #    0.40% of all branches                   
-baseMod/256/128     1,179,800       branch-misses             #    0.40% of all branches                   
-baseMod/256/224     1,185,037       branch-misses             #    0.40% of all branches              
-baseMod/1024/32     414,946         branch-misses             #    0.11% of all branches             
-baseMod/1024/128    414,029         branch-misses             #    0.11% of all branches            
-baseMod/1024/224    423,683         branch-misses             #    0.11% of all branches             
+baseMod/16/32       branch-misses    0.01% of all branches
+baseMod/16/128      branch-misses    0.01% of all branches                        
+baseMod/16/224      branch-misses    0.01% of all branches             
+baseMod/64/32       branch-misses    0.01% of all branches                     
+baseMod/64/128      branch-misses    0.01% of all branches                  
+baseMod/64/224      branch-misses    0.02% of all branches             
+baseMod/256/32      branch-misses    0.40% of all branches                   
+baseMod/256/128     branch-misses    0.40% of all branches                   
+baseMod/256/224     branch-misses    0.40% of all branches              
+baseMod/1024/32     branch-misses    0.11% of all branches             
+baseMod/1024/128    branch-misses    0.11% of all branches            
+baseMod/1024/224    branch-misses    0.11% of all branches             
 ```
 
 And here are the results for `fastMod`.
 
 ```
-fastMod/16/32       44,052          branch-misses             #    0.00% of all branches
-fastMod/16/128      45,134          branch-misses             #    0.00% of all branches                        
-fastMod/16/224      165,187         branch-misses             #    0.01% of all branches             
-fastMod/64/32       69,907          branch-misses             #    0.01% of all branches                     
-fastMod/64/128      75,747          branch-misses             #    0.01% of all branches                  
-fastMod/64/224      972,921         branch-misses             #    0.07% of all branches             
-fastMod/256/32      1,401,461       branch-misses             #    0.22% of all branches                   
-fastMod/256/128     151,744         branch-misses             #    0.01% of all branches                   
-fastMod/256/224     11,978,222      branch-misses             #    0.71% of all branches              
-fastMod/1024/32     4,972,570       branch-misses             #    0.66% of all branches             
-fastMod/1024/128    6,387,262       branch-misses             #    0.65% of all branches            
-fastMod/1024/224    29,981,203      branch-misses             #    2.79% of all branches             
+fastMod/16/32       branch-misses    0.00% of all branches
+fastMod/16/128      branch-misses    0.00% of all branches                        
+fastMod/16/224      branch-misses    0.01% of all branches             
+fastMod/64/32       branch-misses    0.01% of all branches                     
+fastMod/64/128      branch-misses    0.01% of all branches                  
+fastMod/64/224      branch-misses    0.07% of all branches             
+fastMod/256/32      branch-misses    0.22% of all branches                   
+fastMod/256/128     branch-misses    0.01% of all branches                   
+fastMod/256/224     branch-misses    0.71% of all branches              
+fastMod/1024/32     branch-misses    0.66% of all branches             
+fastMod/1024/128    branch-misses    0.65% of all branches            
+fastMod/1024/224    branch-misses    2.79% of all branches             
 ```
 
-Notice how there are almost 0% branch misses for both benchmarks? That should be an immediate red flag. If our branch for conditionally performing modulo is based on a random input, we'd expect the branch predictor have a difficult time predicting the outcome. If the branch is skewed one direction, we'd expect the branch preductor unit (BPU) to perform better (i.e., for the `ceil=32` and `ceil=224`, cases where we almost always perform modulo, or almost never do). So why are we seeing roughly the same miss-prediction rate for all three cases?
+Notice no variant of `fastMod` has many branch misses? That should be an immediate red flag. If our branch for conditionally performing modulo uses a random input, we'd expect the branch predictor have a difficult time predicting the outcome. If the branch is skewed one direction, we'd expect the branch preductor unit (BPU) to perform better (i.e., for the `ceil=32` and `ceil=224`). Those would be cases where we almost always perform modulo, or almost never do. So why are we seeing roughly the same miss-prediction rate for every `ceil` value?
 
-It's the input data! We create one vector of random numbers, and re-use those random numbers for every iteration of the benchmarking loop. That means that the branch predictor can learn the branch outcomes from the first few iterations of the benchmark, and predict them with a high degree of accuracy for the remainder of the iterations. When we increase the size of the vectors, we put more pressure on the BPU. We're not measuring how `fastMod` performs with random input data, we're measuring how it performs with random input data *and* almost perfect branch prediction.
+It's the input data! We create one vector of random numbers before the benchmark loop, and re-use those random numbers for every iteration. That means the BPU can learn the branch outcomes from the first few iterations of the benchmark, and predict them (with a high degree of accuracy) for subsequent iterations. We're not measuring how `fastMod` performs with random input data, we're measuring how it performs with random input data *and* nearly perfect branch prediction.
+
+## Accounting for Branch Prediction
 
 The BPU has a finite amount of state to record information about branch outcome history. When we use larger vector sizes, the BPU stops being able to "memorize" all the branch outcomes. It's only at this point where our input stream of data starts to look like a random input stream of data, and not just a repeated pattern.
 
 Don't believe me? Good! Stay skeptical. Make people prove their assertions. Let's place a cap on the number of iterations of our `fastMod` benchmark. We'll test 1, 1000, and 100000 iterations. Note, with fewer iterations, the timing information will be less stable (i.e., you may see the inconsistent timing results). To roughly account for this, I ran the test multiple times am reporting the best results for each iteration step. We don't need to be extremely precise here, as there will already be a _huge_ difference in performance.
 
-Here were the results for iterations=1.
+Here were the results for `iterations=1`.
 
 ```
 ------------------------------------------------------------------------
@@ -352,7 +354,7 @@ fastMod/1024/128/iterations:1       6792 ns         6627 ns            1
 fastMod/1024/224/iterations:1       3578 ns         3409 ns            1
 ```
 
-Here are the results for iterations=1,000.
+Here are the results for `iterations=1,000`.
 
 ```
 ---------------------------------------------------------------------------
@@ -372,7 +374,7 @@ fastMod/1024/128/iterations:1000       2071 ns         2072 ns         1000
 fastMod/1024/224/iterations:1000       1315 ns         1301 ns         1000
 ```
 
-And finally, the results for iterations=100,000.
+And finally, the results for `iterations=100,000`.
 
 ```
 -----------------------------------------------------------------------------
@@ -393,23 +395,21 @@ fastMod/1024/224/iterations:100000       1277 ns         1277 ns       100000
 
 ```
 
-Notice how the performance seems to improve the more iterations we run (and by almost 20x is some cases)? Our branch predictor is learning!
-
-Now let's compare the prediction rates of `fastMod` when we use a larger input size (N > 2^12).
+Notice how the performance seems to improve the more iterations we run (and by almost 20x is some cases)? Our branch predictor is learning! Now let's compare the prediction rates of `fastMod` when we use a larger input size (N > 2^12).
 
 ```
-fastMod/4096/32     18,577,245      branch-misses             #    3.48% of all branches
-fastMod/4096/128    55,620,265      branch-misses             #   12.88% of all branches
-fastMod/4096/224    33,225,762      branch-misses             #    4.95% of all branches
-fastMod/8192/32     27,709,832      branch-misses             #    4.68% of all branches
-fastMod/8192/128    44,043,830      branch-misses             #   19.35% of all branches
-fastMod/8192/224    45,040,339      branch-misses             #    5.88% of all branches
-fastMod/16384/32    20,877,808      branch-misses             #    5.79% of all branches
-fastMod/16384/128   60,975,087      branch-misses             #   22.51% of all branches
-fastMod/16384/224   60,882,352      branch-misses             #    6.67% of all branches
+fastMod/4096/32     branch-misses    3.48% of all branches
+fastMod/4096/128    branch-misses   12.88% of all branches
+fastMod/4096/224    branch-misses    4.95% of all branches
+fastMod/8192/32     branch-misses    4.68% of all branches
+fastMod/8192/128    branch-misses   19.35% of all branches
+fastMod/8192/224    branch-misses    5.88% of all branches
+fastMod/16384/32    branch-misses    5.79% of all branches
+fastMod/16384/128   branch-misses   22.51% of all branches
+fastMod/16384/224   branch-misses    6.67% of all branches
 ```
 
-Now we have some values that make sense. When we do a modulo of 32 or 224, we'd expect a slightly better hit rate. That's because our branches will either almost always be taken or not taken. We'd expect our BPU to perform the wors with modulo 128, because approximately half our values will take the branch, and the other half will not, and in no particular order.
+Now our values match our expectation. When we do a modulo of 32 or 224, we'd expect a slightly better hit rate. That's because our branches will either almost always be taken or not taken. We'd expect our BPU to perform the wors with modulo 128, because approximately half our values will take the branch, and the other half will not, and in no particular order.
 
 Let's take a look at our original performance measurements for the larger vector sizes, and use the branch miss-prediction rates to guide our analysis.
 
@@ -428,7 +428,11 @@ fastMod/16384/128       94.4 us         94.4 us        29949
 fastMod/16384/224       41.3 us         41.3 us        68449
 ```
 
-Our %128 cases perform the worst because of the bad miss-prediction rate. Our %32 cases are slightly worse than our `baseMod`, but not terrible. That's because the branch is biased towards one side, and the BPU does a decent job and predicting the outcomes. However, the loop is not skipping many modulo operations, and we still occasionally pay the price for miss-predicting. The %224 cases are similar performance, if not slightly better than `baseMod`. That's because the BPU is predicting the branch outcomes faily well because the branch is biased, and we're skipping many of the modulo operations.
+Our `ceil=128` cases perform the worst because of the bad miss-prediction rate. Our %32 cases are slightly worse than our `baseMod`, but not terrible. That's because the branch is biased towards one side, and the BPU does a decent job and predicting the outcomes. However, the loop is not skipping many modulo operations, and we still occasionally pay the price for miss-predicting. The %224 cases are similar performance, if not slightly better than `baseMod`. That's because the BPU is predicting the branch outcomes faily well because the branch is biased, and we're skipping many of the modulo operations.
+
+### Side Note - Avoiding Unnecessary Complexity
+
+But why not just re-generate new random numbers each iteration? Generating random numbers takes time. If we added the random number generation within the benchmarking loop, we'd have to account for that in the results. By simply increasing the size of our vectors to simulate streaming random numbers, we can keep our benchmarking loop clean.
 
 ## Concluding Remarks
 
