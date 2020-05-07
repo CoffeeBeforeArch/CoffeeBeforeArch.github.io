@@ -233,7 +233,7 @@ Significantly faster! Let's see why by looking at the assembly.
   1.79 │    └──jmp    202                                  
 ```
 
-The fallthrough of the branch is now the case where we are *not* performing the division (the compiler will typically place the likely path as the fallthrough path). In fact, the division has be moved far away from our tight inner-loop! Another metric we can compare between baseMod and fastMod is the difference in the cylces where the divider is active. Let's compare the tests `baseMod/1024/224` and `fastModHint/1024/224` for a constant number of iteratios (1000000).
+The fallthrough of the branch is now the case where we are *not* performing the division (the compiler will typically place the likely path as the fallthrough path). In fact, the division has be moved far away from our tight inner-loop! Another metric we can compare between baseMod and fastMod is the difference in the cylces where the divider is active. Let's compare the tests `baseMod/1024/224` and `fastModHint/1024/224` for a constant number of iterations (1000000).
 
 ```
 baseMod/1024/224      7,462,530,966      arith.divider_active
@@ -244,7 +244,7 @@ Unsuprisingly, when 7/8's our data does not perform the modulo, we have 1/7 the 
 
 ## "unstableMod" Performance
 
-I'll now be introducing `unstableMod`. This benchmark has wildly varying performace, as compared with `baseMod` and `fastMod`. Instead of starting out by explaining the C++, let's compare the performance to `baseMod`. I've also increased the vector sizes to (4096, 8192, and 16384). Here are the numbers for `baseMod`.
+I'll now be introducing `unstableMod`. This benchmark has wildly varying performace, as compared with `baseMod` and `fastMod`. Instead of starting out by explaining the C++, let's compare the performance to `baseMod`. I've also increased the vector sizes to 4096, 8192, and 16384. Here are the numbers for `baseMod`.
 
 ```
 ------------------------------------------------------------
@@ -324,7 +324,7 @@ fastMod/1024/128    branch-misses    0.65% of all branches
 fastMod/1024/224    branch-misses    2.79% of all branches             
 ```
 
-Notice how `fastMod` has has very few (if any) branch miss-predictions? That should be an immediate red flag. If our branch for conditionally performing modulo uses a random input, we'd expect the branch predictor have a difficult guessing the outcome. If the branch is skewed to one side, we'd expect the branch preductor unit (BPU) to perform better (i.e., for the `ceil=32` and `ceil=224`). We'd expect the worst miss-prediction rate when there is an equal proabability of taken an not take for the branch (i.e., for the `ceil=128` case) So why are we seeing roughly the same miss-prediction rate for every input pair?
+Notice how `fastMod` has very few (if any) branch miss-predictions? That should be an immediate red flag. If our branch for conditionally performing modulo uses a random input, we'd expect the branch predictor have a difficult time guessing the outcome. If the branch is skewed to one side, we'd expect the branch preductor unit (BPU) to perform better (i.e., for `ceil=32` and `ceil=224`). We'd expect the worst miss-prediction rate when there is an equal proabability that the branch taken and not taken (i.e., for the `ceil=128` case). So why are we seeing roughly the same miss-prediction rate for every input pair?
 
 It's the input data! We created one vector of random numbers before the main benchmark loop, and re-use those random numbers every iteration. That means the BPU can learn the branch outcomes from the first few iterations of the benchmark, and predict them (with a high degree of accuracy) in the subsequent iterations. We're not measuring how `fastMod` performs with random input data, we're measuring how it performs with random input data *and* a warmed up BPU.
 
@@ -440,7 +440,7 @@ Why not just re-generate new random numbers each iteration? Generating random nu
 
 One of the difficult parts of benchmarking is not falling the many subtle pitfalls. When we write a benchmark, that doesn't mean our work is done. We must first verify that we are measuring what we set out to measure. In our case, we intended to measure the performance of using a branch to avoid always performing the expensive modulo operation when we have random input data. However, what we actually measured the the performance of using a branch that is _almost always predicted correctly_ to avoid an expensive modulo operation.
 
-While it seems that this benchmark from [Chandler's talk](https://youtu.be/nXaxk27zwlk) has some key problems, it still contains a lot of valuable insights. One of the key points from the talk is to go out and measure things. In this case, it just so happens that we needed to measure a few more things (the branch miss-prediction rates). Looks like the example wasn't so crazy after all.
+While it seems that this benchmark from [Chandler's talk](https://youtu.be/nXaxk27zwlk) has some key problems, the talk  contains a lot of valuable insights. One of the key points from the talk is to go out and measure things. In this case, it just so happens that we needed to measure a few more things (the branch miss-prediction rates). Looks like the example wasn't so crazy after all.
 
 As always, feel free to contact me with questions.
 
