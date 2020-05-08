@@ -25,7 +25,7 @@ g++ bench_name.cpp -O3 -lbenchmark -lpthread -march=native -mtune=native
 
 ## Baseline Modulo Performance
 
-- *"I want to briefly look at one other crazy example"* - Chandler Carruth prior to this example
+- *"I want to briefly look at one other crazy example"* - [55:26](https://youtu.be/nXaxk27zwlk?t=3326)
 
 Before we examine the modulo optimization in the video, we need to re-gather the baseline data. For this, we'll start `baseMod`. Here is the C++ code.
 
@@ -117,6 +117,8 @@ As expected, our ceiling for modulo does not impact the performance of `baseMod`
 A faithful translation of what we had in our high-level C++. We load in a new value, use `idiv` to perform the modulo, store the result, increment the loop counter, and check to see if we're out of elements.
 
 ## "fastMod" Performance
+
+- *"I have invented for you the world's fastest modulus operator"* - [55:53](https://youtu.be/nXaxk27zwlk?t=3346)
 
 Now we'll take a look at the `fastMod` benchmark from the video. Here my version based on the code in the presentation.
 
@@ -244,6 +246,8 @@ Unsuprisingly, when 7/8's our data does not perform the modulo, we have 1/7 the 
 
 ## "unstableMod" Performance
 
+- *"So now if I rerun this I should get slightly more interesting data"* - [59:14](https://youtu.be/nXaxk27zwlk?t=3554)
+
 I'll now be introducing `unstableMod`. This benchmark has wildly varying performace, as compared with `baseMod` and `fastMod`. Instead of starting out by explaining the C++, let's compare the performance to `baseMod`. I've also increased the vector sizes to 4096, 8192, and 16384. Here are the numbers for `baseMod`.
 
 ```
@@ -329,6 +333,8 @@ Notice how `fastMod` has very few (if any) branch miss-predictions? That should 
 It's the input data! We created one vector of random numbers before the main benchmark loop, and re-use those random numbers every iteration. That means the BPU can learn the branch outcomes from the first few iterations of the benchmark, and predict them (with a high degree of accuracy) in the subsequent iterations. We're not measuring how `fastMod` performs with random input data, we're measuring how it performs with random input data *and* a warmed up BPU.
 
 ## Accounting for Branch Prediction
+
+- *"And then I ran the benchmark. I measured."* - [1:13:31](https://youtu.be/nXaxk27zwlk?t=4411)
 
 The BPU has a finite amount of state to track branch outcome history and targets. When we use larger vector sizes, the BPU stops being able to "memorize" all the branch outcomes and targets. It's only at this point where our input stream of data starts to look like a random input stream of data, and not just a repeated pattern.
 
