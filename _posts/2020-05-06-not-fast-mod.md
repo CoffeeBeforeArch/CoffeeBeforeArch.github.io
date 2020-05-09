@@ -253,7 +253,7 @@ Our data matches our expectations! When the hint is bad, we're slower than our o
   0.53 │    └──jmpq       242                                    
 ```
 
-The fallthrough of the branch is now the case where we are *not* performing the division (the compiler will typically place the likely path as the fallthrough path). In fact, the division has be moved far away from our tight inner-loop! One final metric we can compare is the difference in the cylces where the divider is active. Let's compare the tests `baseMod/1024/224`, `fastMod/1024/224` `fastModHint/1024/224` for a constant number of iterations (1000000).
+The fallthrough of the branch is now the case where we are *not* performing the division (the compiler will typically place the likely path as the fallthrough path). In fact, the division has been moved far away from our tight inner-loop! One final metric we can compare is the difference in the cylces where the divider is active. Let's compare the tests `baseMod/1024/224`, `fastMod/1024/224` `fastModHint/1024/224` for a constant number of iterations (1000000).
 
 ```
 baseMod/1024/224      7,654,562,646      arith.divider_active
