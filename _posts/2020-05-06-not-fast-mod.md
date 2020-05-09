@@ -244,7 +244,6 @@ Our data matches our expectations! When the hint is bad, we're slower than our o
   0.15 │    │  lea        0x1(%rcx),%rax                         
   0.04 │    ├──cmp        %rcx,%rsi                              
   6.97 │    └──jne        238                                    
-
 .
 .
 .
