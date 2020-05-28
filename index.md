@@ -23,6 +23,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [A (Not So) fastMod]({% post_url 2020-05-06-not-fast-mod %})
 
+- [Thread Affinity]({% post_url 2020-05-27-thread-affinity %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
