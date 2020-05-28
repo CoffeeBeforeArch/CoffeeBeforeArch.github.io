@@ -1,69 +1,111 @@
 ---
 layout: default
-title: Detecting False Sharing with Perf C2C
+title: Thread Affinity
 ---
 
-# Detecting False Sharing with Perf C2C
+# Thread Affinity
 
-In a [previous](https://coffeebeforearch.github.io/2019/12/28/false-sharing-tutorial.html) post we showed how false sharing cause serious slowdown in an application. However, we did not discuss how it can be debugged after-the-fact. While reasoning about your code can help you remove cases of false sharing ahead of time, there may be cases that are well-hidden in the code, or the result of runtime behavior of the application. For cases like this, tools can help. Perf C2C can be used for this exact purpose.
+When you write a multi-threaded application, there are a number of performance pitfalls to watch out for. If you partition your data poorly, you may suffer from false sharing. Likewise, if you don't fairly partition your work, you may end up with a mixture of threads overloaded with work, while other are mostly idle. Another thing to consider is where threads are placed in relation to each other.
+
+Placing threads that share data close to each other may allow you to exploit inter-thread locality. Likewise, placing threads that share data far apart may result in contention, especially if threads are scheduled to different NUMA nodes. Unfortunately your operating system is mostly-oblivious to the needs of your application with respect to thread scheduling, and as a result, often makes sub-optimal decisions (if not given guidance). In this blog post, we'll be taking a look at exactly how we can give this scheduling guidance to our O.S. using Pthreads.
 
 ### Link to the source code
+- [Source Code: ](https://github.com/CoffeeBeforeArch/misc_code/tree/master/thread_affinity)
+- [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
+- [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
+- My Email: CoffeeBeforeArch@gmail.com
 
-- [Source Code](https://github.com/CoffeeBeforeArch/spring_2020_tutorial/tree/master/false_sharing)
+## Compiling and Running the Benchmarks
 
-## Perf C2C
+The benchmarks from this blog post were written using [Google Benchmark](https://github.com/google/benchmark). The following is the command I used to compile the benchmarks (on Ubuntu 18.04 using g++10).
 
-Perf C2C (Cache to Cache) is for analyzing shared data C2C/HITM. HITM stands for a load that hit in a modified cache line. The primary purpose of the tool is to report details on cache lines with the highest contention (e.g., the highest number of HITM accesses). More information can be found at the man page [here](http://man7.org/linux/man-pages/man1/perf-c2c.1.html).
+```bash
+g++ thread_affinity.cpp -lbenchmark -lpthread -O3 -march=native -mtune=native -o thread_affinity
+```
 
-## Example Code
+## Relying on the O.S.
 
-To show off how to use Perf C2C, we'll use our sample code from last time. This includes a simple "work" function that increments an atomic integer, and a function that launches multiple threads, each of which calls this "work" function with a different atomic integer. The false sharing comes from the fact that all four of the atomic integers wind up on the same cache line. 
-
+Let's craft a benchmark with pairs of threads fighting over shared pieces of data. The first thing we need to do is to have our threads compete over something. Let's use an atomic integer that we increment 100k times. Here's what that looks like.
 
 ```cpp
 void work(std::atomic<int>& a) {
-  for(int i = 0; i < 100000; ++i) {
+  for(int i = 0; i < 100000; ++i)
     a++;
-  }
 }
-
 ```
 
+Now we need some threads to do the fighting. Here's how the rest of the main benchmark loop was implemented.
+
 ```cpp
-void falseSharing() {
-  // Create a single atomic integer
-  std::atomic<int> a;
-  a = 0;
-  std::atomic<int> b;
-  b = 0;
-  std::atomic<int> c;
-  c = 0;
-  std::atomic<int> d;
-  d = 0;
+struct alignas(64) AlignedAtomic {
+  AlignedAtomic(int v) { val = v; }
+  std::atomic<int> val;
+};
 
-  // Four threads each with their own atomic<int>
-  std::thread t1([&]() {work(a)});
-  std::thread t2([&]() {work(b)});
-  std::thread t3([&]() {work(c)});
-  std::thread t4([&]() {work(d)});
+void os_scheduler() {
+  AlignedAtomic a{0};
+  AlignedAtomic b{0};
 
-  // Join the 4 threads
+  // Create four threads and use lambda to launch work
+  std::thread t0([&]() { work(a.val); });
+  std::thread t1([&]() { work(a.val); });
+  std::thread t2([&]() { work(b.val); });
+  std::thread t3([&]() { work(b.val); });
+
+  // Join the threads
+  t0.join();
   t1.join();
   t2.join();
   t3.join();
-  t4.join();
-} 
+}
 ```
 
-This code was compiled using g++10 using the following command.
+Threads t0 and t1 compete for AlignedAtomic 'a', while threads t2 and t3 compete for AlignedAtomic 'b'. AlignedAtomic is just an atomic int wrapped in a struct which is aligned to 64B. This keeps our atomic ints from winding up on the same cache line.  
 
-```bash
-g++ false_sharing.cpp -lbenchmark -lpthread -O3 -march=native
+For this experiment, we're expecting heavy contention on two cache lines (the ones that have our AlignedAtomics. Let's take a look at both the execution time, and Shared Data Cache Line Table from `perf-c2c`. Here is the execution time (we'll focus on the wall clock time reported in the 'Time' column).
+
+```
+-----------------------------------------------------------------
+Benchmark                       Time             CPU   Iterations
+-----------------------------------------------------------------
+osScheduling/real_time       5.09 ms        0.080 ms          100
 ```
 
-![post compile](/assets/perf_c2c/post_compile.png)
+Ok, some baseline timing, now let's take a look at some stats using `perf c2c record` and `perf c2c report`. Here's a truncated view of the Shared Data Cache Line Table.
 
-The full source code can be found [here](https://github.com/CoffeeBeforeArch/uarch_benchmarks/tree/master/false_sharing).
+```
+Shared Data Cache Line Table     (2 entries, sorted on Total HITMs)
+                             Total      Tot  ----- LLC Load Hitm -----
+Index           Cacheline  records     Hitm    Total      Lcl      Rmt
+    0      0x7fff1dede640     3242   53.67%     1630     1630        0     
+    1      0x7fff1dede600     2703   46.23%     1404     1404        0 
+```
+
+Just as we expected, two cacheline under heavy contention. As a reminder, Hitm events are being used as a measure of contention. Hitm events occur when a thread loads data and finds the cache line it's looking for is in the modified state in a different cache. Many of these events mean 2 or more threads are fighting for exclusive access to a cache line so they can write to it. Let's zoom in on cache line `0x7fff1dede640` for some more information.
+
+```
+Cacheline 0x7fff1dede640
+----- HITM -----                cpu
+    Rmt      Lcl       Off      cnt
+  0.00%   59.20%       0x0        4  (Thread t3)
+  0.00%   40.80%       0x0        4  (Thread t4)
+```
+
+Two threads accessing the same part of the same cache line (AlignedAtomic 'b' in this case). What we should focus on is the `cpu cnt` column. This is the number of physical cores that samples came from (all 4 in my 4 core/8 thread CPU). This means that both of our threads hopped around to all 4 cores in our system during execution.
+
+When the O.S. schedules a thread to a core, it doesn't just leave it there until it finishes. It may move the thread around if the scheduler thinks it is advantageous to do so (depending on the current load of the CPU). This means our performance may vary (and significantly). Let's compare the timing for a few runs.
+
+```
+-----------------------------------------------------------------
+Benchmark                       Time             CPU   Iterations
+-----------------------------------------------------------------
+osScheduling/real_time       6.08 ms        0.149 ms          133
+osScheduling/real_time       5.16 ms        0.140 ms          100
+osScheduling/real_time       5.45 ms        0.078 ms          100
+osScheduling/real_time       4.77 ms        0.074 ms          145
+```
+
+A wide range of results. Let's see if we can help our O.S. with some scheduling guidance.
 
 ## Using Perf C2C
 
