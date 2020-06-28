@@ -27,6 +27,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Strength Reduction]({% post_url 2020-06-06-strength-reduction %})
 
+- [Optimizing Matrix Multiplication]({% post_url 2020-06-23-mmul %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
