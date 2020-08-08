@@ -1,9 +1,9 @@
 ---
 layout: default
-title: Atomic vs Mutex
+title: Mutex vs Atomic
 ---
 
-# Atomic vs Mutex
+# Mutex vs Atomic
 
 Some parallel applications do not have any data sharing between threads. Others have sharing between threads that is read-only. But some applications are more complex, and require the coordiation of multiple threads that want to write to the same memory. In these situations, we can reach into our parallel programming toolbox for something like `std::mutex` to make sure only a single thread enters a critical section at a time. However, a mutex can be significantly more overhead than we actually need. In this blog post, we'll be comparing the performance between using a mutex and directly using atomic operations in a few benchmarks.
 
@@ -119,6 +119,30 @@ ThreadSanitizer: reported 1 warnings
 You may have wondered how there can be any interleaving when our increment in C++ gets translated to a single x86 instruction (like `add` or `inc`). This is beause x86 processors don't actually execute x86 instructions (at least not directly). These instructions get translated into micro-operations (uops), and the uops can be interleaved between threads.
 
 Check out [uops.info](https://www.uops.info/) for more information.
+
+## Parallel Increment - Mutex and Atomic
+
+In this section, we'll discuss how to avoid the race condition in our parallel increment example using mutexes and atomics.
+
+### Parallel Increment - Mutex
+
+The first way we can avoid our race condition is using a mutex (`std::mutex` in this example). Below is the definition of `std::mutex` from [en.cppreference.com](https://en.cppreference.com/w/cpp/thread/mutex):
+
+- The mutex class is a synchronization primitive that can be used to protect shared data from being simultaneously accessed by multiple threads.
+
+Sounds like exactly what we are looking for (a way to serialize access to shared data)! Let's look at an updated benchmark where we use a `std::mutex` to limit access to `shared_val` to a single thread at a time.
+
+```cpp
+ // Function to increment using a lock
+ void inc_mutex(std::mutex &m, int &shared_val) {
+   for (int i = 0; i < (2 << 16); i++) {
+     std::lock_guard<std::mutex> g(m);
+     shared_val++;
+   }
+ }
+```
+
+Before we try and update `shared_val`, we first try and lock our mutex (using a `std::lock_guard`).
 
 ## Concluding remarks
 
