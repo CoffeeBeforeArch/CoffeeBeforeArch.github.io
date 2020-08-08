@@ -130,19 +130,88 @@ The first way we can avoid our race condition is using a mutex (`std::mutex` in 
 
 - The mutex class is a synchronization primitive that can be used to protect shared data from being simultaneously accessed by multiple threads.
 
-Sounds like exactly what we are looking for (a way to serialize access to shared data)! Let's look at an updated benchmark where we use a `std::mutex` to limit access to `shared_val` to a single thread at a time.
+Sounds like exactly what we are looking for (a way to serialize access to shared data)! Let's look at an updated function that will be called from multiple threads where we use a `std::mutex` to serialize access to `shared_val`.
 
 ```cpp
  // Function to increment using a lock
  void inc_mutex(std::mutex &m, int &shared_val) {
-   for (int i = 0; i < (2 << 16); i++) {
+   for (int i = 0; i < (1 << 16); i++) {
      std::lock_guard<std::mutex> g(m);
      shared_val++;
    }
  }
 ```
 
-Before we try and update `shared_val`, we first try and lock our mutex (using a `std::lock_guard`).
+Let's step through what's going on here. Each iteration of the loop, we use a `std::lock_guard` to lock our `std::mutex`. If a thread finds the `std::mutex` is already locked, it waits for the lock to be released. If a thread finds the `std::mutex` unlocked, it locks the `std::mutex`, increments `shared_val`, then unlocks the mutex (the `std::lock_guard` object locks the mutex when it is created, and releases it when it is destroyed).
+
+Let's take a looks at the low-level assembly:
+
+```
+  1.15 │278:┌─→mov    %rbx,%rdi
+ 19.31 │    │→ callq  pthread_mutex_lock@plt
+  0.46 │    │  test   %eax,%eax
+       │    │↓ jne    3b1
+       │    │  mov    %rbx,%rdi
+ 36.78 │    │  incq   0x30(%rsp)
+ 20.69 │    │→ callq  pthread_mutex_unlock@plt
+       │    ├──dec    %ebp
+ 21.61 │    └──jne    278
+```
+
+Pretty much what we described above! We call `pthread_mutex_lock`, use an `incq` to increment the value, then call `pthread_mutex_unlock`. Now let's compare the performance when we scale the number of threads.
+
+```
+-------------------------------------------------------------
+Benchmark                   Time             CPU   Iterations
+-------------------------------------------------------------
+lock_guard_bench/1       2.00 ms         2.00 ms          350
+lock_guard_bench/2       13.0 ms         11.9 ms           60
+lock_guard_bench/3       20.3 ms         14.5 ms           40
+lock_guard_bench/4       28.4 ms         16.7 ms           42
+```
+
+Unsurprisingly, our performance gets worse as the number of threads increases. That's because with more threads, we have more contention for our lock.
+
+### Parallel Increment - Atomic
+
+As usual in programming, there are many different ways to solve a problem. Using a mutex to solve our parallel increment race condition is actually overkill. What we should be using are atomic operations. Here is overview of the atomic operations library from [en.cppreference.com](https://en.cppreference.com/w/cpp/atomic)
+
+- The atomic library provides components for fine-grained atomic operations allowing for lockless concurrent programming. Each atomic operation is indivisible with regards to any other atomic operation that involves the same object. Atomic objects are free of data races.
+
+Basically, our increment that requires a read, modify, and write of `shared_val` becomes a single indivisible operation. That means there can be no interleaving of operations across threads.
+
+Let's take a look at how we can do this in C++:
+
+```cpp
+// Function to incrememnt atomic int
+void inc_atomic(std::atomic<int> &shared_val) {
+  for (int i = 0; i < (1 << 16); i++) shared_val++;
+}
+```
+
+Each increment of `shared_val` is now an atomic increment! Let's see how this translates to the low-level assembly.
+
+```
+ 98.89 │10:   lock   incq (%rdx)
+  0.03 │      dec    %eax
+  1.08 │    ↑ jne    10
+```
+
+A much more streamlined routine. We perform `incq` instructions with the `lock` prefix 2^16 times on each thread. This `lock` prefix ensures that the core performing the instruction has exclusive ownership of the cache line we are writing to for the entire operation. This is how the increment is made into an indivisible unit.
+
+Now let's look at the performance with a varying number of threads, and compare the performance to using a mutex:
+
+```
+-------------------------------------------------------------
+Benchmark                   Time             CPU   Iterations
+-------------------------------------------------------------
+atomic_bench/1          0.624 ms        0.624 ms         1117
+atomic_bench/2           2.67 ms         2.34 ms          285
+atomic_bench/3           3.99 ms         2.90 ms          224
+atomic_bench/4           5.94 ms         4.15 ms          168
+```
+
+Way faster than using a mutex! But this shouldn't be terribly surprising. When we use a mutex, we're relying on software routines to lock and unlock the mutex. With our atomic operations, we're relying on the underlying hardware mechanisms to make the increment an indivisible operation.
 
 ## Concluding remarks
 
