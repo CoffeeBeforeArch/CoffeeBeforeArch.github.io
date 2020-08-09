@@ -5,7 +5,7 @@ title: Mutex vs Atomic
 
 # Mutex vs Atomic
 
-Some parallel applications do not have any data sharing between threads. Others have sharing between threads that is read-only. But some applications are more complex, and require the coordiation of multiple threads that want to write to the same memory. In these situations, we can reach into our parallel programming toolbox for something like `std::mutex` to make sure only a single thread enters a critical section at a time. However, a mutex can be significantly more overhead than we actually need. In this blog post, we'll be compare a few different benchmarks using mutexes and atomics, analyze the performance results.
+Some parallel applications do not have any data sharing between threads. Others have sharing between threads that is read-only. But some applications are more complex, and require the coordiation of multiple threads that want to write to the same memory. In these situations, we can reach into our parallel programming toolbox for something like `std::mutex` to make sure only a single thread enters a critical section at a time. However, a mutex is just one tool in our toolbox, and different synchronization mechanisms have different performance characteristics. In this blog post, we'll be compare a few different benchmarks using mutexes and atomics, analyze the performance results.
 
 ### Link to the source code
 
@@ -16,7 +16,7 @@ Some parallel applications do not have any data sharing between threads. Others 
 
 ## Compiling and Running the Benchmarks
 
-The benchmarks from this blog post were written using [Google Benchmark](https://github.com/google/benchmark). Below is the command I used to compile the simple increment benchmarks (on Ubuntu 18.04 using g++10).
+The benchmarks from this blog post were written using [Google Benchmark](https://github.com/google/benchmark). Below is the command I used to compile the simple increment benchmarks (on Ubuntu 20.04 using g++10).
 
 ```bash
 g++ inc_bench.cpp -lbenchmark -lpthread -O3 -march=native -mtune=native -flto -fuse-linker-plugin -o inc_bench
@@ -223,6 +223,10 @@ atomic_bench/8/real_time           13.4 ms         11.3 ms           52
 Way faster than using a mutex (by over 3x in some cases)! But this shouldn't be terribly surprising. When we use a mutex, we're relying on software routines to lock and unlock the mutex. With our atomic operations, we're relying on the underlying hardware mechanisms to make the increment an indivisible operation.
 
 However, it's important to note that what we're profiling here is repeated locks and unlocks for our mutex, and repeated atomic increments for our atomic benchmark. This is largely an artifical scenario, so we should be cautious in thinking cases where we can replace a mutex with an atomic operation will give us a massive speedup.
+
+### Additional Notes
+
+One interesting question to ask is how to locks get passed between threads when we use a mutex? There are numerous different techniques that have varying level of complexity, fairness, and performance. [Here](https://www.cs.rice.edu/~vs3/comp422/lecture-notes/comp422-lec19-s08-v1.pdf) is a presentation that goes over some of the classical lock algorithms.
 
 ## Matrix Multiplication - Mutex and Atomics
 
