@@ -5,9 +5,10 @@ title: Mutex vs Atomic
 
 # Mutex vs Atomic
 
-Some parallel applications do not have any data sharing between threads. Others have sharing between threads that is read-only. But some applications are more complex, and require the coordiation of multiple threads that want to write to the same memory. In these situations, we can reach into our parallel programming toolbox for something like `std::mutex` to make sure only a single thread enters a critical section at a time. However, a mutex can be significantly more overhead than we actually need. In this blog post, we'll be comparing the performance between using a mutex and directly using atomic operations in a few benchmarks.
+Some parallel applications do not have any data sharing between threads. Others have sharing between threads that is read-only. But some applications are more complex, and require the coordiation of multiple threads that want to write to the same memory. In these situations, we can reach into our parallel programming toolbox for something like `std::mutex` to make sure only a single thread enters a critical section at a time. However, a mutex can be significantly more overhead than we actually need. In this blog post, we'll be compare a few different benchmarks using mutexes and atomics, analyze the performance results.
 
 ### Link to the source code
+
 - [Source Code: ](https://github.com/CoffeeBeforeArch/misc_code/tree/master/inc_bench)
 - [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
 - [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
@@ -273,7 +274,7 @@ static_mmul_bench/10/real_time       29.1 ms         23.6 ms           57
 
 ### Dynamically Mapped Using Mutexes and Atomics
 
-One way we can try to make the performance better is by dynamically mapping elements to threads. The rationale behind this is that threads complete work at different rates due to things like runtime scheduling differences. If work is statically and evenly divided between threads, some threads may finish their work faster than others (due to advantageous thread schedules), and be sitting around waiting for the others to finish. With dynamically mapped work, Threads that finish their work early simply ask for more work instead of sitting idle.
+One way we can try to make the performance better is by dynamically mapping elements to threads. The rationale behind this is that threads complete work at different rates due to things like runtime scheduling differences. If work is statically and evenly divided between threads, some threads may finish their work faster than others (due to advantageous thread schedules), and be sitting around waiting for the others to finish. With dynamically mapped work, threads that finish their work early simply ask for more work instead of sitting idle.
 
 Let's first take a look at an implementation with mutexes:
 
@@ -364,7 +365,7 @@ atomic_mmul_bench/9/real_time        2.78 ms         2.31 ms          246
 atomic_mmul_bench/10/real_time       21.0 ms         18.8 ms           33
 ```
 
-Interestingly enough, they're about the same as when we used a `std::mutex` (and still ~30% faster than the static mapping)! In these examples, most of our time is being spent doing fused multiply-add operations in the inner loops, and not performing the fetch and add in the outer-most loop. Because the fetch and add is not the bottleneck, we see little-to-no performance difference between our mutex and atomic implementation.
+Interestingly enough, they're about the same as when we used a `std::mutex` (and still ~30% faster than the static mapping)! In these examples, most of our time is being spent doing fused multiply-add operations in the inner loops, and not performing the fetch and add in the outer-most loop. Because the fetch and add is not the bottleneck, it's unlikely that performance differences between the two will manifest in a significant way.
 
 ## Final Thoughts
 
