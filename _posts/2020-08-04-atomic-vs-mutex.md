@@ -278,7 +278,7 @@ static_mmul_bench/10/real_time       29.1 ms         23.6 ms           57
 
 ### Dynamically Mapped Using Mutexes and Atomics
 
-One way we can try to make the performance is by having a queue of work items rather than statically dividing the work. The rationale behind this is that threads complete work at different rates due to things like runtime scheduling differences. If work is statically and evenly divided between threads, some threads may finish their work faster than others (due to advantageous thread schedules), leading to idle resources. With a queue of work items, threads can keep grabbing more work until there is nothing left, minimizing the time threads are sitting idle while there is still work to do.
+One way we can try to improve the performance is by having a queue of work items rather than statically dividing the work. The rationale behind this is that threads complete work at different rates due to things like runtime scheduling differences. If work is statically and evenly divided between threads, some threads may finish their work faster than others (due to advantageous thread schedules), leading to idle resources. With a queue of work items, threads can keep grabbing more work until there is nothing left, minimizing the time threads are sitting idle while there is still work to do.
 
 Let's first take a look at an implementation with mutexes:
 
@@ -317,7 +317,7 @@ Let's first take a look at an implementation with mutexes:
  }
 ```
 
-In the outer-most loop, each thread gets a chunk of 16 columns to solve from our `fetch_and_add` routine. This routine takes the current position (`pos`), saves the current value, increments `pos` by 16, and returns the previously value. Access to `pos` is restricted using a `std::mutex` and `std::lock_guard`.
+In the outer-most loop, each thread gets a chunk of 16 columns to solve from our `fetch_and_add` routine. This routine takes the current position (`pos`), saves the current value, increments `pos` by 16, and returns the previously value. Access to `pos` is restricted using a `std::mutex` and `std::lock_guard`. You can think of `pos` as our position in the queue of or work items (which are really just chunks of the output matrix we are solving).
 
 Let's measure the performance:
 
