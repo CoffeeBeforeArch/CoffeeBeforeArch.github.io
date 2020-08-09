@@ -278,7 +278,7 @@ static_mmul_bench/10/real_time       29.1 ms         23.6 ms           57
 
 ### Dynamically Mapped Using Mutexes and Atomics
 
-One way we can try to make the performance better is by dynamically mapping elements to threads. The rationale behind this is that threads complete work at different rates due to things like runtime scheduling differences. If work is statically and evenly divided between threads, some threads may finish their work faster than others (due to advantageous thread schedules), and be sitting around waiting for the others to finish. With dynamically mapped work, threads that finish their work early simply ask for more work instead of sitting idle.
+One way we can try to make the performance is by having a queue of work items rather than statically dividing the work. The rationale behind this is that threads complete work at different rates due to things like runtime scheduling differences. If work is statically and evenly divided between threads, some threads may finish their work faster than others (due to advantageous thread schedules), leading to idle resources. With a queue of work items, threads can keep grabbing more work until there is nothing left, minimizing the time threads are sitting idle while there is still work to do.
 
 Let's first take a look at an implementation with mutexes:
 
