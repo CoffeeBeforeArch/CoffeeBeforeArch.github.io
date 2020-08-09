@@ -5,7 +5,7 @@ title: Mutex vs Atomic
 
 # Mutex vs Atomic
 
-Some parallel applications do not have any data sharing between threads. Others have sharing between threads that is read-only. But some applications are more complex, and require the coordiation of multiple threads that want to write to the same memory. In these situations, we can reach into our parallel programming toolbox for something like `std::mutex` to make sure only a single thread enters a critical section at a time. However, a mutex is just one tool in our toolbox, and different synchronization mechanisms have different performance characteristics. In this blog post, we'll be compare a few different benchmarks using mutexes and atomics, analyze the performance results.
+Some parallel applications do not have any data sharing between threads. Others have sharing between threads that is read-only. But some applications are more complex, and require the coordiation of multiple threads that want to write to the same memory. In these situations, we can reach into our parallel programming toolbox for something like `std::mutex` to make sure only a single thread enters a critical section at a time. However, a mutex is just one tool in our toolbox, and different synchronization mechanisms have different performance characteristics. In this blog post, we'll be compare a few different benchmarks using mutexes and atomics, and analyze the performance results of each.
 
 ### Link to the source code
 
@@ -66,7 +66,7 @@ First, thread 1 reads `shared_val`. Then, thread 2 reads `shared val`. Next, thr
 
 Let's start with `shared_val = 0`. First, both threads read `shared_val`, and find a value of `0`. Next both threads increment this value to `1`. Finally, both threads write the value `1` to memory. Each thread performed an increment, but the final value of `shared_val` doesn't reflect this because of the interleaving!
 
-Here are a few print outs from when I ran the program:
+Here are a few printouts from when I ran the program:
 
 ```
 FINAL VALUE IS: 65536
@@ -317,7 +317,7 @@ Let's first take a look at an implementation with mutexes:
  }
 ```
 
-In the outer-most loop, each thread gets a chunk of 16 columns to solve from our `fetch_and_add` routine. This routine takes the position (`pos`), saves the current value, increments `pos` by 16, and returns the original value. Access to `pos` is restricted using a `std::mutex` and `std::lock_guard`.
+In the outer-most loop, each thread gets a chunk of 16 columns to solve from our `fetch_and_add` routine. This routine takes the current position (`pos`), saves the current value, increments `pos` by 16, and returns the previously value. Access to `pos` is restricted using a `std::mutex` and `std::lock_guard`.
 
 Let's measure the performance:
 
@@ -358,7 +358,7 @@ void blocked_column_multi_output_parallel_atomic_gemm(
 
 ```
 
-Pretty much the same as our mutex, except we don't have to write our own `fetch_and_add` routine. Let's take a look at the performance results.
+Pretty much the same as our `std::mutex`, except we don't have to write our own `fetch_and_add` routine. Let's take a look at the performance results.
 
 ```
 -------------------------------------------------------------------------
