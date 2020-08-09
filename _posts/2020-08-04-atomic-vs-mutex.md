@@ -147,27 +147,31 @@ Let's step through what's going on here. Each iteration of the loop, we use a `s
 Let's take a looks at the low-level assembly:
 
 ```
-  1.15 │278:┌─→mov    %rbx,%rdi
- 19.31 │    │→ callq  pthread_mutex_lock@plt
-  0.46 │    │  test   %eax,%eax
-       │    │↓ jne    3b1
-       │    │  mov    %rbx,%rdi
- 36.78 │    │  incq   0x30(%rsp)
- 20.69 │    │→ callq  pthread_mutex_unlock@plt
-       │    ├──dec    %ebp
- 21.61 │    └──jne    278
+       │20:┌─→mov   %r12,%rdi
+ 22.62 │   │→ callq pthread_mutex_lock@plt
+  2.51 │   │  test  %eax,%eax
+       │   │↓ jne   60
+ 49.50 │   │  incq  0x0(%rbp)
+  0.75 │   │  mov   %r12,%rdi
+ 11.33 │   │→ callq pthread_mutex_unlock@plt
+       │   ├──dec   %ebx
+ 13.29 │   └──jne   20
 ```
 
 Pretty much what we described above! We call `pthread_mutex_lock`, use an `incq` to increment the value, then call `pthread_mutex_unlock`. Now let's compare the performance when we scale the number of threads.
 
 ```
--------------------------------------------------------------
-Benchmark                   Time             CPU   Iterations
--------------------------------------------------------------
-lock_guard_bench/1       2.00 ms         2.00 ms          350
-lock_guard_bench/2       13.0 ms         11.9 ms           60
-lock_guard_bench/3       20.3 ms         14.5 ms           40
-lock_guard_bench/4       28.4 ms         16.7 ms           42
+-----------------------------------------------------------------------
+Benchmark                             Time             CPU   Iterations
+-----------------------------------------------------------------------
+lock_guard_bench/1/real_time       1.30 ms         1.23 ms          543
+lock_guard_bench/2/real_time       8.02 ms         7.56 ms           82
+lock_guard_bench/3/real_time       8.55 ms         7.41 ms           80
+lock_guard_bench/4/real_time       19.4 ms         16.0 ms           36
+lock_guard_bench/5/real_time       24.5 ms         20.3 ms           29
+lock_guard_bench/6/real_time       32.8 ms         28.3 ms           22
+lock_guard_bench/7/real_time       39.4 ms         33.2 ms           18
+lock_guard_bench/8/real_time       44.8 ms         38.5 ms           16
 ```
 
 Unsurprisingly, our performance gets worse as the number of threads increases. That's because with more threads, we have more contention for our lock.
@@ -202,18 +206,169 @@ A much more streamlined routine. We perform `incq` instructions with the `lock` 
 Now let's look at the performance with a varying number of threads, and compare the performance to using a mutex:
 
 ```
--------------------------------------------------------------
-Benchmark                   Time             CPU   Iterations
--------------------------------------------------------------
-atomic_bench/1          0.624 ms        0.624 ms         1117
-atomic_bench/2           2.67 ms         2.34 ms          285
-atomic_bench/3           3.99 ms         2.90 ms          224
-atomic_bench/4           5.94 ms         4.15 ms          168
+-----------------------------------------------------------------------
+Benchmark                             Time             CPU   Iterations
+-----------------------------------------------------------------------
+atomic_bench/1/real_time          0.400 ms        0.400 ms         1737
+atomic_bench/2/real_time           3.24 ms         3.13 ms          224
+atomic_bench/3/real_time           5.34 ms         5.11 ms          100
+atomic_bench/4/real_time           7.18 ms         6.95 ms           96
+atomic_bench/5/real_time           8.43 ms         6.03 ms           78
+atomic_bench/6/real_time           9.78 ms         7.78 ms           72
+atomic_bench/7/real_time           11.5 ms         10.4 ms           59
+atomic_bench/8/real_time           13.4 ms         11.3 ms           52
 ```
 
-Way faster than using a mutex! But this shouldn't be terribly surprising. When we use a mutex, we're relying on software routines to lock and unlock the mutex. With our atomic operations, we're relying on the underlying hardware mechanisms to make the increment an indivisible operation.
+Way faster than using a mutex (by over 3x in some cases)! But this shouldn't be terribly surprising. When we use a mutex, we're relying on software routines to lock and unlock the mutex. With our atomic operations, we're relying on the underlying hardware mechanisms to make the increment an indivisible operation.
 
-## Concluding remarks
+However, it's important to note that what we're profiling here is repeated locks and unlocks for our mutex, and repeated atomic increments for our atomic benchmark. This is largely an artifical scenario, so we should be cautious in thinking cases where we can replace a mutex with an atomic operation will give us a massive speedup.
+
+## Matrix Multiplication - Mutex and Atomics
+
+In this section, we'll look at a few different implementations of matrix multiplication, and compare the difference in performance when elements are statically mapped to threads, or dynamically mapped using mutexes or atomics.
+
+### Statically Mapped Elements
+
+We can parallelize matrix multiplication without without synchronization mechanisms if we have threads work on different parts of the output matrix. Here is an example implementation that performs some cache tiling for even better performance:
+
+```cpp
+ // Blocked column parallel implementation w/o atomic
+ void blocked_column_multi_output_parallel_gemm(const double *A, const double *B,
+                                                double *C, std::size_t N,
+                                                std::size_t tid,
+                                                std::size_t stride) {
+   // For each chunk of columns
+   for (std::size_t col_chunk = tid * 16; col_chunk < N; col_chunk += stride)
+     // For each chunk of rows
+     for (std::size_t row_chunk = 0; row_chunk < N; row_chunk += 16)
+       // For each block of elements in this row of this column chunk
+       // Solve for 16 elements at a time
+       for (std::size_t tile = 0; tile < N; tile += 16)
+         // For apply that tile to each row of the row chunk
+         for (std::size_t row = 0; row < 16; row++)
+           // For each row in the tile
+           for (std::size_t tile_row = 0; tile_row < 16; tile_row++)
+             // Solve for each element in this tile row
+             for (std::size_t idx = 0; idx < 16; idx++)
+               C[(row + row_chunk) * N + col_chunk + idx] +=
+                   A[(row + row_chunk) * N + tile + tile_row] *
+                   B[tile * N + tile_row * N + col_chunk + idx];
+ }
+```
+
+Each thread process 16 columns of output elements each iteration of the outer-most loop until every element has been processed (we're assuming square matrices that have a dimension `N` that is divisible by 16).
+
+Let's measure the performance when we statically partition the matrix like this for matrices of dimension `2^8 + 16`, `2^9 + 16`, and `2^10 + 16`. We are not directly using a power-of-two dimension to avoid cache assosciativity problems (conflict misses).
+
+Here are the results:
+
+```
+-------------------------------------------------------------------------
+Benchmark                               Time             CPU   Iterations
+-------------------------------------------------------------------------
+static_mmul_bench/8/real_time       0.913 ms        0.462 ms         1771
+static_mmul_bench/9/real_time        4.01 ms         2.51 ms          340
+static_mmul_bench/10/real_time       29.1 ms         23.6 ms           57
+```
+
+### Dynamically Mapped Using Mutexes and Atomics
+
+One way we can try to make the performance better is by dynamically mapping elements to threads. The rationale behind this is that threads complete work at different rates due to things like runtime scheduling differences. If work is statically and evenly divided between threads, some threads may finish their work faster than others (due to advantageous thread schedules), and be sitting around waiting for the others to finish. With dynamically mapped work, Threads that finish their work early simply ask for more work instead of sitting idle.
+
+Let's first take a look at an implementation with mutexes:
+
+```cpp
+ // Fetch and add routine using a mutex
+ uint64_t fetch_and_add(uint64_t &pos, std::mutex &m) {
+   std::lock_guard<std::mutex> g(m);
+   auto ret_val = pos;
+   pos += 16;
+   return ret_val;
+ }
+ 
+ // Blocked column parallel implementation w/ atomics
+ void blocked_column_multi_output_parallel_mutex_gemm(const double *A,
+                                                      const double *B, double *C,
+                                                      std::size_t N,
+                                                      uint64_t &pos,
+                                                      std::mutex &m) {
+   // For each chunk of columns
+   for (std::size_t col_chunk = fetch_and_add(pos, m); col_chunk < N;
+        col_chunk = fetch_and_add(pos, m))
+     // For each chunk of rows
+     for (std::size_t row_chunk = 0; row_chunk < N; row_chunk += 16)
+       // For each block of elements in this row of this column chunk
+       // Solve for 16 elements at a time
+       for (std::size_t tile = 0; tile < N; tile += 16)
+         // For apply that tile to each row of the row chunk
+         for (std::size_t row = 0; row < 16; row++)
+           // For each row in the tile
+           for (std::size_t tile_row = 0; tile_row < 16; tile_row++)
+             // Solve for each element in this tile row
+             for (std::size_t idx = 0; idx < 16; idx++)
+               C[(row + row_chunk) * N + col_chunk + idx] +=
+                   A[(row + row_chunk) * N + tile + tile_row] *
+                   B[tile * N + tile_row * N + col_chunk + idx];
+ }
+```
+
+In the outer-most loop, each thread gets a chunk of 16 columns to solve from our `fetch_and_add` routine. This routine takes the position (`pos`), saves the current value, increments `pos` by 16, and returns the original value. Access to `pos` is restricted using a `std::mutex` and `std::lock_guard`.
+
+Let's measure the performance:
+
+```
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+mutex_mmul_bench/8/real_time       0.519 ms        0.474 ms         1345
+mutex_mmul_bench/9/real_time        2.80 ms         2.33 ms          242
+mutex_mmul_bench/10/real_time       21.3 ms         19.1 ms           33
+```
+
+A decent improvement compared to our statically mapped version (~30% improvement). Now let's look at an implementation where we directly atomic `fetch_add` for a `std::atomic`:
+
+```cpp
+// Blocked column parallel implementation w/ atomics
+void blocked_column_multi_output_parallel_atomic_gemm(
+    const double *A, const double *B, double *C, std::size_t N,
+    std::atomic<uint64_t> &pos) {
+  // For each chunk of columns
+  for (std::size_t col_chunk = pos.fetch_add(16); col_chunk < N;
+       col_chunk = pos.fetch_add(16))
+    // For each chunk of rows
+    for (std::size_t row_chunk = 0; row_chunk < N; row_chunk += 16)
+      // For each block of elements in this row of this column chunk
+      // Solve for 16 elements at a time
+      for (std::size_t tile = 0; tile < N; tile += 16)
+        // For apply that tile to each row of the row chunk
+        for (std::size_t row = 0; row < 16; row++)
+          // For each row in the tile
+          for (std::size_t tile_row = 0; tile_row < 16; tile_row++)
+            // Solve for each element in this tile row
+            for (std::size_t idx = 0; idx < 16; idx++)
+              C[(row + row_chunk) * N + col_chunk + idx] +=
+                  A[(row + row_chunk) * N + tile + tile_row] *
+                  B[tile * N + tile_row * N + col_chunk + idx];
+}
+
+```
+
+Pretty much the same as our mutex, except we don't have to write our own `fetch_and_add` routine. Let's take a look at the performance results.
+
+```
+-------------------------------------------------------------------------
+Benchmark                               Time             CPU   Iterations
+-------------------------------------------------------------------------
+atomic_mmul_bench/8/real_time       0.516 ms        0.458 ms         1349
+atomic_mmul_bench/9/real_time        2.78 ms         2.31 ms          246
+atomic_mmul_bench/10/real_time       21.0 ms         18.8 ms           33
+```
+
+Interestingly enough, they're about the same as when we used a `std::mutex` (and still ~30% faster than the static mapping)! In these examples, most of our time is being spent doing fused multiply-add operations in the inner loops, and not performing the fetch and add in the outer-most loop. Because the fetch and add is not the bottleneck, we see little-to-no performance difference between our mutex and atomic implementation.
+
+## Final Thoughts
+
+Are mutexes and atomics the same thing? No, certainly not. However, both can be used to solve parallel programming problems where threads want to access the same piece of data. Mutexes allow us to serialize access to a region of code through locking and unlocking. Atomic operations allow us to directly make use of hardware locking mechanisms for fundamental operations like increment, add, exchange, etc.. What's important is that we understand the tools in our parallel programming toolbox, and the costs/benefits of each.
 
 Thanks for reading,
 
