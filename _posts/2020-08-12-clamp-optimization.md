@@ -5,7 +5,7 @@ title: Compiler Optimization of a Clamp Function
 
 # Compiler Optimization of a Clamp Function
 
-Modern processors are incredibly complex, and writing functionally correct code for even a moderately complex application can be a painful and teadious endeavor. Luckily for us, we have compilers that allow us to write code in high level languages like C++ that produce not just correct code, but highly optimized code as well. In this blog post, we'll be looking at a simple clamp benchmark, and compiling it at different optimization levels, and with different optimization flags, and comparing the performance and generated assembly for each experiment.
+Modern processors are incredibly complex, and writing functionally correct code for even a moderately complex application can be a painful and teadious endeavor. Luckily for us, we have compilers that allow us to write code in high level languages like C++ that produce not just correct code, but highly optimized code as well. In this blog post, we'll be looking at a simple clamp benchmark, and compiling it at different optimization levels, and with different optimization flags. We'll then look at both the performance and generated assembly for each experiment to understand how things change based on the compiler optimizations.
 
 ### Link to the source code
 
@@ -158,12 +158,6 @@ static void clamp_bench_raw_ptr(benchmark::State &s) {
   delete[] v_out;
 }
 BENCHMARK(clamp_bench_raw_ptr)->DenseRange(8, 10);
-```
-
-We can compile the code with the following commmand:
-
-```bash
-g++ clamp_bench.cpp -lbenchmark -lpthread -O0 -o clamp
 ```
 
 And here is the output assembly:
@@ -808,5 +802,4 @@ Thanks for reading,
 - [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
 - [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
 - My Email: CoffeeBeforeArch@gmail.com
-
 
