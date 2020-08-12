@@ -74,37 +74,37 @@ This implementation of our clamp function uses a for loop to clamp the vectors f
 And here is the output assembly:
 
 ```assembly
-  3.34 │307:┌─→lea     -0x2780(%rbp),%rax                                         ▒
-       │    │  mov     %rax,%rdi                                                  ▒
-  1.53 │    │→ callq   std::vector<int, std::allocator<int> >::size               ▒
-  0.31 │    │  cmp     %rax,-0x27e0(%rbp)                                         ▒
-  1.64 │    │  setb    %al                                                        ▒
-  3.53 │    │  test    %al,%al                                                    ▒
-       │    │↓ je      390                                                        ▒
-       │    │  mov     -0x27e0(%rbp),%rdx                                         ▒
-  0.14 │    │  lea     -0x2780(%rbp),%rax                                         ▒
-  1.18 │    │  mov     %rdx,%rsi                                                  ▒
-  3.36 │    │  mov     %rax,%rdi                                                  ▒
-  0.14 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         ▒
-  8.44 │    │  mov     (%rax),%eax                                                ▒
-  1.03 │    │  cmp     $0x200,%eax                                                ▒
-  1.24 │    │↓ jg      363                                                        ▒
- 17.13 │    │  mov     -0x27e0(%rbp),%rdx                                         ▒
-  0.32 │    │  lea     -0x2780(%rbp),%rax                                         ▒
-  0.78 │    │  mov     %rdx,%rsi                                                  ▒
-  0.62 │    │  mov     %rax,%rdi                                                  ▒
-  2.73 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         ▒
-  7.38 │    │  mov     (%rax),%ebx                                                ▒
-  0.55 │    │↓ jmp     368                                                        ▒
- 18.42 │363:│  mov     $0x200,%ebx                                                ▒
-  5.05 │368:│  mov     -0x27e0(%rbp),%rdx                                         ▒
-  0.36 │    │  lea     -0x2760(%rbp),%rax                                         ▒
-  3.13 │    │  mov     %rdx,%rsi                                                  ▒
-  0.60 │    │  mov     %rax,%rdi                                                  ▒
-  2.47 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         ▒
- 12.72 │    │  mov     %ebx,(%rax)                                                ▒
-  0.09 │    │  addq    $0x1,-0x27e0(%rbp)                                         ▒
-  1.56 │    └──jmpq    307                                                        ▒
+  3.34 │307:┌─→lea     -0x2780(%rbp),%rax                                         
+       │    │  mov     %rax,%rdi                                                  
+  1.53 │    │→ callq   std::vector<int, std::allocator<int> >::size               
+  0.31 │    │  cmp     %rax,-0x27e0(%rbp)                                         
+  1.64 │    │  setb    %al                                                        
+  3.53 │    │  test    %al,%al                                                    
+       │    │↓ je      390                                                        
+       │    │  mov     -0x27e0(%rbp),%rdx                                         
+  0.14 │    │  lea     -0x2780(%rbp),%rax                                         
+  1.18 │    │  mov     %rdx,%rsi                                                  
+  3.36 │    │  mov     %rax,%rdi                                                  
+  0.14 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         
+  8.44 │    │  mov     (%rax),%eax                                                
+  1.03 │    │  cmp     $0x200,%eax                                                
+  1.24 │    │↓ jg      363                                                        
+ 17.13 │    │  mov     -0x27e0(%rbp),%rdx                                         
+  0.32 │    │  lea     -0x2780(%rbp),%rax                                         
+  0.78 │    │  mov     %rdx,%rsi                                                  
+  0.62 │    │  mov     %rax,%rdi                                                  
+  2.73 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         
+  7.38 │    │  mov     (%rax),%ebx                                                
+  0.55 │    │↓ jmp     368                                                        
+ 18.42 │363:│  mov     $0x200,%ebx                                                
+  5.05 │368:│  mov     -0x27e0(%rbp),%rdx                                         
+  0.36 │    │  lea     -0x2760(%rbp),%rax                                         
+  3.13 │    │  mov     %rdx,%rsi                                                  
+  0.60 │    │  mov     %rax,%rdi                                                  
+  2.47 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         
+ 12.72 │    │  mov     %ebx,(%rax)                                                
+  0.09 │    │  addq    $0x1,-0x27e0(%rbp)                                         
+  1.56 │    └──jmpq    307                                                        
 ```
 
 Seems like a lot of assembly for such simple operation, but remember, this is largely unoptimized. Let's break it down into some key key components.
@@ -165,26 +165,26 @@ BENCHMARK(clamp_bench_raw_ptr)->DenseRange(8, 10);
 And here is the output assembly:
 
 ```assembly
- 14.20 │32e:┌─→mov     -0x27b0(%rbp),%eax                                                 ▒
-  0.57 │    │  cmp     -0x27ac(%rbp),%eax                                                 ▒
-       │    │↓ jge     38b                                                                ▒
-  0.22 │    │  mov     -0x27b0(%rbp),%eax                                                 ▒
-  0.34 │    │  cltq                                                                       ▒
- 12.82 │    │  lea     0x0(,%rax,4),%rdx                                                  ▒
-  0.54 │    │  mov     -0x27a8(%rbp),%rax                                                 ▒
-  0.42 │    │  add     %rdx,%rax                                                          ▒
- 21.44 │    │  mov     (%rax),%eax                                                        ▒
-  6.38 │    │  mov     -0x27b0(%rbp),%edx                                                 ▒
-       │    │  movslq  %edx,%rdx                                                          ▒
-       │    │  lea     0x0(,%rdx,4),%rcx                                                  ▒
-  6.65 │    │  mov     -0x27a0(%rbp),%rdx                                                 ▒
-  7.04 │    │  add     %rcx,%rdx                                                          ▒
-       │    │  mov     $0x200,%ecx                                                        ▒
-       │    │  cmp     $0x200,%eax                                                        ▒
-  6.23 │    │  cmovg   %ecx,%eax                                                          ▒
- 21.78 │    │  mov     %eax,(%rdx)                                                        ▒
-  0.67 │    │  addl    $0x1,-0x27b0(%rbp)                                                 ▒
-       │    └──jmp     32e                                                                ▒
+ 14.20 │32e:┌─→mov     -0x27b0(%rbp),%eax                                                 
+  0.57 │    │  cmp     -0x27ac(%rbp),%eax                                                 
+       │    │↓ jge     38b                                                                
+  0.22 │    │  mov     -0x27b0(%rbp),%eax                                                 
+  0.34 │    │  cltq                                                                       
+ 12.82 │    │  lea     0x0(,%rax,4),%rdx                                                  
+  0.54 │    │  mov     -0x27a8(%rbp),%rax                                                 
+  0.42 │    │  add     %rdx,%rax                                                          
+ 21.44 │    │  mov     (%rax),%eax                                                        
+  6.38 │    │  mov     -0x27b0(%rbp),%edx                                                 
+       │    │  movslq  %edx,%rdx                                                          
+       │    │  lea     0x0(,%rdx,4),%rcx                                                  
+  6.65 │    │  mov     -0x27a0(%rbp),%rdx                                                 
+  7.04 │    │  add     %rcx,%rdx                                                          
+       │    │  mov     $0x200,%ecx                                                        
+       │    │  cmp     $0x200,%eax                                                        
+  6.23 │    │  cmovg   %ecx,%eax                                                          
+ 21.78 │    │  mov     %eax,(%rdx)                                                        
+  0.67 │    │  addl    $0x1,-0x27b0(%rbp)                                                 
+       │    └──jmp     32e                                                                
 ```
 
 Still un-optimized, but a lot cleaner than our std::vector implementation. Furthermore, you can see we don't have a branch anymore for our clamp. It has been replaced by a `cmovg`, which conditionally moves a value if it is greater than another based on the result of the previous compare (`cmp`). 
@@ -721,16 +721,16 @@ As a reminder, we wll only be looking at a single benchmark since they all now g
 Let's see if our assembly changed when we enabled `-O3` optimizations:
 
 ```assembly
- 18.70 │290:┌─→movdqu  0x0(%rbp,%rax,1),%xmm0                               ▒
-  1.39 │    │  movdqu  0x0(%rbp,%rax,1),%xmm3                               ▒
- 16.98 │    │  movdqa  %xmm1,%xmm2                                          ▒
-  2.73 │    │  pcmpgtd %xmm1,%xmm0                                          ▒
- 17.90 │    │  pand    %xmm0,%xmm2                                          ▒
-  1.56 │    │  pandn   %xmm3,%xmm0                                          ▒
- 18.13 │    │  por     %xmm2,%xmm0                                          ▒
-  1.50 │    │  movups  %xmm0,(%r12,%rax,1)                                  ▒
- 17.72 │    │  add     $0x10,%rax                                           ▒
-  0.03 │    ├──cmp     %rdx,%rax                                            ▒
+ 18.70 │290:┌─→movdqu  0x0(%rbp,%rax,1),%xmm0                               
+  1.39 │    │  movdqu  0x0(%rbp,%rax,1),%xmm3                               
+ 16.98 │    │  movdqa  %xmm1,%xmm2                                          
+  2.73 │    │  pcmpgtd %xmm1,%xmm0                                          
+ 17.90 │    │  pand    %xmm0,%xmm2                                          
+  1.56 │    │  pandn   %xmm3,%xmm0                                          
+ 18.13 │    │  por     %xmm2,%xmm0                                          
+  1.50 │    │  movups  %xmm0,(%r12,%rax,1)                                  
+ 17.72 │    │  add     $0x10,%rax                                           
+  0.03 │    ├──cmp     %rdx,%rax                                            
   1.40 │    └──jne    
 ```
 
@@ -753,7 +753,7 @@ Vectorization can have a huge impact on performance (as seen in this example). H
 
 ## Clamp at -O3 Optimization with Native Tuning
 
-One final thing we will try are the `-march=native` and `-mtune=native` flags. These flags informs the compiler to produce code for the system's processor architecture, tune for the native architecture respectively. 
+One final thing we will try are the `-march=native` and `-mtune=native` flags. These flags tell the compiler to produce code for the native system's processor architecture, and tune for the native architecture respectively. 
 
 Our benchmark was compiled using the following command:
 
@@ -763,7 +763,7 @@ g++ clamp_bench.cpp -lbenchmark -lpthread -O3 -march=native -mtune=native -o cla
 
 ### Benchmark Results
 
-Let's see if compiling and tuning for the native architecture made any difference in our performance. Here is the generated assembly:
+Let's see if compiling and tuning for the native architecture made any difference to our performance. Here is the generated assembly:
 
 ```assembly
  46.07 │2c8:┌─→vpminsd    (%r12,%rax,1),%ymm1,%ymm0                     
