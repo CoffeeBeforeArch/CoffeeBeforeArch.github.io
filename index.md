@@ -31,6 +31,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Atomic vs Mutex]({% post_url 2020-08-04-atomic-vs-mutex %})
 
+- [Compiler Optimizations of a Clamp Function]({% post_url 2020-08-12-clamp-optimization %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})

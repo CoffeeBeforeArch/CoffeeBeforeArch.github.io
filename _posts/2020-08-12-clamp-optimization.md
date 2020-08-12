@@ -31,6 +31,12 @@ For each element in an array/vector, we compare the input to the ceiling. If the
 
 Let's start our journey by looking at some un-optimized code. When we compile using gcc w/o and optimization flags, it defaults to the -O0 optimization level which generates unoptimized code. Let's compare the results of a few different C++ implementations of our clamp function.
 
+All of these benchmarks were compiled using the following command:
+
+```bash
+g++ clamp_bench.cpp -lbenchmark -lpthread -O0 -o clamp
+```
+
 ### Clamp w/ Vectors
 
 This implementation of our clamp function uses a for loop to clamp the vectors from an input vector, and store the results into an output vector.
@@ -61,46 +67,40 @@ This implementation of our clamp function uses a for loop to clamp the vectors f
  BENCHMARK(clamp_bench)->DenseRange(8, 10);
 ```
 
-We can compile this using the following command:
-
-```bash
-g++ clamp_bench.cpp -lbenchmark -lpthread -O0 -o clamp
-```
-
 And here is the output assembly:
 
 ```
-  3.50 │307:┌─→lea     -0x2780(%rbp),%rax                                            
-       │    │  mov     %rax,%rdi                                                     
-  2.24 │    │→ callq   std::vector<int, std::allocator<int> >::size                  
-  0.34 │    │  cmp     %rax,-0x27e0(%rbp)                                            
-  1.57 │    │  setb    %al                                                           
-  3.37 │    │  test    %al,%al                                                       
-       │    │↓ je      390                                                           
-  0.09 │    │  mov     -0x27e0(%rbp),%rdx                                            
-  0.27 │    │  lea     -0x2780(%rbp),%rax                                            
-  1.43 │    │  mov     %rdx,%rsi                                                     
-  3.58 │    │  mov     %rax,%rdi                                                     
-  0.28 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]            
-  9.40 │    │  mov     (%rax),%eax                                                   
-  1.15 │    │  cmp     $0x200,%eax                                                   
-  1.48 │    │↓ jg      363                                                           
- 17.41 │    │  mov     -0x27e0(%rbp),%rdx                                            
-  0.48 │    │  lea     -0x2780(%rbp),%rax                                            
-  1.25 │    │  mov     %rdx,%rsi                                                     
-  0.46 │    │  mov     %rax,%rdi                                                     
-  2.96 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]            
-  7.95 │    │  mov     (%rax),%ebx                                                   
-  0.77 │    │↓ jmp     368                                                           
- 14.62 │363:│  mov     $0x200,%ebx                                                   
-  3.80 │368:│  mov     -0x27e0(%rbp),%rdx                                            
-  0.78 │    │  lea     -0x2760(%rbp),%rax                                            
-  2.97 │    │  mov     %rdx,%rsi                                                     
-  0.78 │    │  mov     %rax,%rdi                                                     
-  2.30 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]            
- 12.23 │    │  mov     %ebx,(%rax)                                                   
-  0.28 │    │  addq    $0x1,-0x27e0(%rbp)                                            
-  1.78 │    └──jmpq    307                                                           
+  3.34 │307:┌─→lea     -0x2780(%rbp),%rax                                         ▒
+       │    │  mov     %rax,%rdi                                                  ▒
+  1.53 │    │→ callq   std::vector<int, std::allocator<int> >::size               ▒
+  0.31 │    │  cmp     %rax,-0x27e0(%rbp)                                         ▒
+  1.64 │    │  setb    %al                                                        ▒
+  3.53 │    │  test    %al,%al                                                    ▒
+       │    │↓ je      390                                                        ▒
+       │    │  mov     -0x27e0(%rbp),%rdx                                         ▒
+  0.14 │    │  lea     -0x2780(%rbp),%rax                                         ▒
+  1.18 │    │  mov     %rdx,%rsi                                                  ▒
+  3.36 │    │  mov     %rax,%rdi                                                  ▒
+  0.14 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         ▒
+  8.44 │    │  mov     (%rax),%eax                                                ▒
+  1.03 │    │  cmp     $0x200,%eax                                                ▒
+  1.24 │    │↓ jg      363                                                        ▒
+ 17.13 │    │  mov     -0x27e0(%rbp),%rdx                                         ▒
+  0.32 │    │  lea     -0x2780(%rbp),%rax                                         ▒
+  0.78 │    │  mov     %rdx,%rsi                                                  ▒
+  0.62 │    │  mov     %rax,%rdi                                                  ▒
+  2.73 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         ▒
+  7.38 │    │  mov     (%rax),%ebx                                                ▒
+  0.55 │    │↓ jmp     368                                                        ▒
+ 18.42 │363:│  mov     $0x200,%ebx                                                ▒
+  5.05 │368:│  mov     -0x27e0(%rbp),%rdx                                         ▒
+  0.36 │    │  lea     -0x2760(%rbp),%rax                                         ▒
+  3.13 │    │  mov     %rdx,%rsi                                                  ▒
+  0.60 │    │  mov     %rax,%rdi                                                  ▒
+  2.47 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         ▒
+ 12.72 │    │  mov     %ebx,(%rax)                                                ▒
+  0.09 │    │  addq    $0x1,-0x27e0(%rbp)                                         ▒
+  1.56 │    └──jmpq    307                                                        ▒
 ```
 
 Seems like a lot of assembly for such simple operation, but remember, this is largely unoptimized. Let's break it down into some key key components.
@@ -117,9 +117,9 @@ Now let's look at the performance:
 ------------------------------------------------------------------------
 Benchmark                              Time             CPU   Iterations
 ------------------------------------------------------------------------
-clamp_bench/8                       1711 ns         1711 ns       391179
-clamp_bench/9                       4077 ns         4077 ns       173661
-clamp_bench/10                      8977 ns         8976 ns        77978
+clamp_bench/8                       2066 ns         1947 ns       360128
+clamp_bench/9                       4566 ns         4296 ns       161397
+clamp_bench/10                      9871 ns         9481 ns        74752
 ```
 
 This looks fairly slow, but we won't know for certain until we look at some more data.
@@ -169,26 +169,26 @@ g++ clamp_bench.cpp -lbenchmark -lpthread -O0 -o clamp
 And here is the output assembly:
 
 ```
- 13.27 │2a3:┌─→mov    -0x24(%rbp),%eax                                                        
-  1.39 │    │  cmp    -0x28(%rbp),%eax                                                        
-       │    │↓ jge    2eb                                                                    
-  0.73 │    │  mov    -0x24(%rbp),%eax                                                        
-  0.61 │    │  cltq                                                                         
- 11.88 │    │  lea    0x0(,%rax,4),%rdx                                                     
-  0.92 │    │  mov    -0x30(%rbp),%rax                                                      
-  0.98 │    │  add    %rdx,%rax                                                               
- 22.11 │    │  mov    (%rax),%eax                                                             
-  6.20 │    │  mov    -0x24(%rbp),%edx                                                        
-  0.12 │    │  movslq %edx,%rdx                                                               
-  0.03 │    │  lea    0x0(,%rdx,4),%rcx                                                       
-  6.01 │    │  mov    -0x38(%rbp),%rdx                                                        
-  6.11 │    │  add    %rcx,%rdx                                                               
-  0.15 │    │  mov    $0x200,%ecx                                                             
-  0.06 │    │  cmp    $0x200,%eax                                                             
-  6.87 │    │  cmovg  %ecx,%eax                                                               
- 20.54 │    │  mov    %eax,(%rdx)                                                             
-  1.24 │    │  addl   $0x1,-0x24(%rbp)                                                        
-  0.08 │    └──jmp    2a3                                                                     
+ 14.20 │32e:┌─→mov     -0x27b0(%rbp),%eax                                                 ▒
+  0.57 │    │  cmp     -0x27ac(%rbp),%eax                                                 ▒
+       │    │↓ jge     38b                                                                ▒
+  0.22 │    │  mov     -0x27b0(%rbp),%eax                                                 ▒
+  0.34 │    │  cltq                                                                       ▒
+ 12.82 │    │  lea     0x0(,%rax,4),%rdx                                                  ▒
+  0.54 │    │  mov     -0x27a8(%rbp),%rax                                                 ▒
+  0.42 │    │  add     %rdx,%rax                                                          ▒
+ 21.44 │    │  mov     (%rax),%eax                                                        ▒
+  6.38 │    │  mov     -0x27b0(%rbp),%edx                                                 ▒
+       │    │  movslq  %edx,%rdx                                                          ▒
+       │    │  lea     0x0(,%rdx,4),%rcx                                                  ▒
+  6.65 │    │  mov     -0x27a0(%rbp),%rdx                                                 ▒
+  7.04 │    │  add     %rcx,%rdx                                                          ▒
+       │    │  mov     $0x200,%ecx                                                        ▒
+       │    │  cmp     $0x200,%eax                                                        ▒
+  6.23 │    │  cmovg   %ecx,%eax                                                          ▒
+ 21.78 │    │  mov     %eax,(%rdx)                                                        ▒
+  0.67 │    │  addl    $0x1,-0x27b0(%rbp)                                                 ▒
+       │    └──jmp     32e                                                                ▒
 ```
 
 Still un-optimized, but a lot cleaner than our std::vector implementation. Furthermore, you can see we don't have a branch anymore for our clamp. It's been replaced by a `cmovg`, which conditionally moves a value based on the result of the previous compare (`cmp`). 
@@ -201,9 +201,9 @@ Here are the performance results:
 ------------------------------------------------------------------------
 Benchmark                              Time             CPU   Iterations
 ------------------------------------------------------------------------
-clamp_bench_raw_ptr/8                686 ns          682 ns      1033335
-clamp_bench_raw_ptr/9               1347 ns         1339 ns       524740
-clamp_bench_raw_ptr/10              2831 ns         2810 ns       267156
+clamp_bench_raw_ptr/8                551 ns          528 ns      1000000
+clamp_bench_raw_ptr/9                860 ns          830 ns       838950
+clamp_bench_raw_ptr/10              1731 ns         1650 ns       426407
 ```
 
 Fairly large! Let's keep track on how this changes as we increase the optimization levels.
@@ -246,52 +246,69 @@ Functionally the same as our previous two implementations, but we're relying mor
 Let's take a look at the assembly:
 
 ```
-  0.15 │17:┌─→lea    -0x20(%rbp),%rdx                                                                                                                 
-       │   │  lea    -0x18(%rbp),%rax                                                                                                                 
-  0.04 │   │  mov    %rdx,%rsi                                                                                                                        
-  5.72 │   │  mov    %rax,%rdi                                                                                                                        
-  0.19 │   │→ callq  bool __gnu_cxx::operator!=<int*, std::vector<int, std::allocator<int                                                             
-  1.65 │   │  test   %al,%al                                                                                                                          
-  0.04 │   │↓ je     408d41 <__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > > std::transform<__gnu_cxx::__normal_iterator<i
-  0.12 │   │  lea    -0x18(%rbp),%rax                                                                                                                 
-  4.53 │   │  mov    %rax,%rdi                                                                                                                        
-  1.96 │   │→ callq  __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int                                                           
- 31.49 │   │  mov    (%rax),%r12d                                                                                                                     
-  0.88 │   │  lea    -0x28(%rbp),%rax                                                                                                                 
-       │   │  mov    %rax,%rdi                                                                                                                        
-  6.75 │   │→ callq  __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int                                                           
-  0.08 │   │  mov    %rax,%rbx                                                                                                                        
-  2.34 │   │  lea    -0x29(%rbp),%rax                                                                                                                 
-  0.08 │   │  mov    %r12d,%esi                                                                                                                       
-  3.53 │   │  mov    %rax,%rdi                                                                                                                        
-  2.61 │   │→ callq  clamp_bench_lambda(benchmark::State&)::{lambda(int)#2}::operator()(int) const                                                    
- 15.96 │   │  mov    %eax,(%rbx)                                                                                                                      
-  0.50 │   │  lea    -0x18(%rbp),%rax                                                                                                                 
-  0.15 │   │  mov    %rax,%rdi                                                                                                                        
-  6.83 │   │→ callq  __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int                                                           
-  4.49 │   │  lea    -0x28(%rbp),%rax                                                                                                                 
-  0.12 │   │  mov    %rax,%rdi                                                                                                                        
-  1.99 │   │→ callq  __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int                                                           
-  7.25 │   └──jmp    408ce1 <__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > > std::transform<__gnu_cxx::__normal_iterator<i
+       │    000000000000b622 <__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > > std::transform<__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, clamp_bench_lambda(benchmark::State&)::{lambda(int)#2}>(__gnu_cxx::__normal_it
+       │    _ZSt9transformIN9__gnu_cxx17__normal_iteratorIPiSt6vectorIiSaIiEEEES6_ZL18clamp_bench_lambdaRN9benchmark5StateEEUliE0_ET0_T_SC_SB_T1_():
+       │      endbr64
+       │      push    %rbp
+       │      mov     %rsp,%rbp
+       │      push    %r12
+       │      push    %rbx
+       │      sub     $0x20,%rsp
+       │      mov     %rdi,-0x18(%rbp)
+       │      mov     %rsi,-0x20(%rbp)
+       │      mov     %rdx,-0x28(%rbp)
+       │      lea     -0x20(%rbp),%rdx
+       │      lea     -0x18(%rbp),%rax
+       │      mov     %rdx,%rsi
+  6.68 │      mov     %rax,%rdi
+  0.03 │    → callq   __gnu_cxx::operator!=<int*, std::vector<int, std::allocator<int> > >
+  0.03 │      test    %al,%al
+       │    → je      b69d <__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > > std::transform<__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> >
+       │      lea     -0x18(%rbp),%rax
+  1.91 │      mov     %rax,%rdi
+  4.18 │    → callq   __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >::operator*
+ 33.23 │      mov     (%rax),%r12d
+  0.13 │      lea     -0x28(%rbp),%rax
+       │      mov     %rax,%rdi
+  7.57 │    → callq   __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >::operator*
+       │      mov     %rax,%rbx
+  1.64 │      lea     -0x29(%rbp),%rax
+  5.18 │      mov     %r12d,%esi
+  0.03 │      mov     %rax,%rdi
+  2.12 │    → callq   clamp_bench_lambda(benchmark::State&)::{lambda(int)#2}::operator()
+ 15.85 │      mov     %eax,(%rbx)
+  0.03 │      lea     -0x18(%rbp),%rax
+  0.03 │      mov     %rax,%rdi
+  7.51 │    → callq   __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >::operator++
+  3.07 │      lea     -0x28(%rbp),%rax
+  0.13 │      mov     %rax,%rdi
+  4.21 │    → callq   __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >::operator++
+  6.03 │    → jmp     b63d <__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > > std::transform<__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> >
+  0.36 │      mov     -0x28(%rbp),%rax
+       │      add     $0x20,%rsp
+  0.03 │      pop     %rbx
+       │      pop     %r12
+       │      pop     %rbp
+       │    ← retq
 ```
 
-Let's parse what's going on here. Each iteration of the loop, we access our input element through our vector iterators. Our input is then passed to our clamp lambda which returns either the ceiling or the input value. Finally, we store that result through a vector iterator. Let's look at the code generated for our lambda in greater detail:
+Let's parse what's going on here. Each iteration of the loop, we access our input element through our vector iterators with `::operator*`. Our input is then clamped with a call to our lambda. Finally, we move to the next element in our iterators using `::operator++`. Let's look at the code generated for our clamp lambda in greater detail:
 
 ```
-       │    0000000000408432 <clamp_bench_lambda(benchmark::State&)::{lambda(int)#2}::operato
+       │    000000000000ac00 <clamp_bench_lambda(benchmark::State&)::{lambda(int)#2}::operator()(int) const>:
        │    _ZZL18clamp_bench_lambdaRN9benchmark5StateEENKUliE0_clEi():
-  0.75 │      push   %rbp
- 18.47 │      mov    %rsp,%rbp
- 12.87 │      mov    %rdi,-0x8(%rbp)
-  1.49 │      mov    %esi,-0xc(%rbp)
- 16.98 │      mov    $0x200,%eax
- 10.07 │      cmpl   $0x200,-0xc(%rbp)
- 19.78 │      cmovle -0xc(%rbp),%eax
-  2.61 │      pop    %rbp
- 16.98 │    ← retq
+ 29.45 │      push   %rbp
+  0.71 │      mov    %rsp,%rbp
+ 10.84 │      mov    %rdi,-0x8(%rbp)
+ 24.26 │      mov    %esi,-0xc(%rbp)
+  0.18 │      mov    $0x200,%eax
+  0.72 │      cmpl   $0x200,-0xc(%rbp)
+ 25.04 │      cmovle -0xc(%rbp),%eax
+  8.43 │      pop    %rbp
+  0.37 │    ← retq
 ```
 
-Very similar to our raw pointer implementation. Instead of a branch, our compiler again opted to use a conditional move (`cmov`) instruction (this time using a less-than comparison).
+Very similar to our raw pointer implementation. Instead of a branch, our compiler opted to use a conditional move (`cmov`) instruction again (this time using a less-than comparison).
 
 Now let's check out the performance:
 
@@ -299,12 +316,490 @@ Now let's check out the performance:
 ------------------------------------------------------------------------
 Benchmark                              Time             CPU   Iterations
 ------------------------------------------------------------------------
-clamp_bench_lambda/8                5054 ns         4972 ns       134519
-clamp_bench_lambda/9                9882 ns         9714 ns        71631
-clamp_bench_lambda/10              19120 ns        18930 ns        37458
+clamp_bench_lambda/8                2883 ns         2853 ns       244106
+clamp_bench_lambda/9                5749 ns         5692 ns       122683
+clamp_bench_lambda/10              11894 ns        11372 ns        62469
 ```
 
+Our worst performance yet! Despite using a `cmov` instruction, we still have too much overhead from our unoptimized C++ operators.
+
+### Clamp with Raw Pointers and std::transform
+
+A final thing we can try is using raw pointers and std::transform. Here's my implementation:
+
+```cpp
+// Benchmark for a clamp function
+// Uses raw pointers to avoid overhead in unoptimized code
+static void clamp_bench_raw_ptr_lambda(benchmark::State &s) {
+  // Number of elements in the vector
+  auto N = 1 << s.range(0);
+
+  // Create our random number generators
+  std::mt19937 rng;
+  rng.seed(std::random_device()());
+  std::uniform_int_distribution<int> dist(0, 1024);
+
+  // Create a vector of random integers
+  int *v_in = new int[N]();
+  int *v_out = new int[N]();
+  std::generate(v_in, v_in + N, [&]() { return dist(rng); });
+
+  // Our clamp function
+  auto clamp = [](int in) { return (in > 512) ? 512 : in; };
+
+  // Main benchmark loop
+  for (auto _ : s) {
+    std::transform(v_in, v_in + N, v_out, clamp);
+  }
+
+  delete[] v_in;
+  delete[] v_out;
+}
+BENCHMARK(clamp_bench_raw_ptr_lambda)->DenseRange(8, 10);
+```
+
+Let's see how our assembly changed using raw pointers:
+
+```
+       │    000000000000b6ec <int* std::transform<int*, int*, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}>(int*, int*, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2})>:
+       │    _ZSt9transformIPiS0_ZL26clamp_bench_raw_ptr_lambdaRN9benchmark5StateEEUliE0_ET0_T_S6_S5_T1_():                                                                                                                         
+  0.05 │      endbr64                                                                                                                                                                            
+       │      push    %rbp                                                                                                                                                                                                                                                         
+       │      mov     %rsp,%rbp                                                                                                                                                                                                                                                    
+  0.03 │      sub     $0x20,%rsp                                                                                                                                                                                                                                                   
+       │      mov     %rdi,-0x8(%rbp)                                                                                                                                                                                                                                              
+       │      mov     %rsi,-0x10(%rbp)                                                                                                                                                                                                                                             
+       │      mov     %rdx,-0x18(%rbp)                                                                                                                                                                                                                                             
+  3.28 │      mov     -0x8(%rbp),%rax                                                                                                                                                                                                                                              
+  0.67 │      cmp     -0x10(%rbp),%rax                                                                                                                                                                                                                                             
+  0.03 │    → je      b734 <int* std::transform<int*, int*, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}>(int*, int*, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2})+0x48>      
+ 14.56 │      mov     -0x8(%rbp),%rax                                                                                                                                                                                                                                              
+ 15.91 │      mov     (%rax),%edx                                                                                                                                                                                                                                                  
+  1.81 │      lea     -0x19(%rbp),%rax                                                                                                                                                                                                                                             
+  0.08 │      mov     %edx,%esi                                                                                                                                                                                                                                                    
+  8.53 │      mov     %rax,%rdi                                                                                                                                                                                                                                                    
+  8.82 │    → callq   clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}::operator()                                                                                                                                                                                   
+  0.21 │      mov     -0x18(%rbp),%rdx                                                                                                                                                                                                                                             
+ 28.54 │      mov     %eax,(%rdx)                                                                                                                                                                                                                                                  
+  2.83 │      addq    $0x4,-0x8(%rbp)                                                                                                                                                                                                                                              
+ 14.13 │      addq    $0x4,-0x18(%rbp)                                                                                                                                                                                                                                             
+       │    → jmp     b704 <int* std::transform<int*, int*, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}>(int*, int*, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2})+0x18>      
+  0.42 │      mov     -0x18(%rbp),%rax                                                                                                                                                                                                                                             
+  0.03 │      leaveq                                                                                                                                                                                                                                                               
+  0.08 │    ← retq                                                                                                                                                                                                                                                                 
+```
+
+Much more clean than our implementation using vectors. Now our `std::transform` accesses memory directly rather than calling the iterator dereference. We also still see a call to our clamp lambda. Here is how our clamp was implemented:
+
+```
+       │    000000000000b09a <clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}::operator()(int) const>:
+       │    _ZZL26clamp_bench_raw_ptr_lambdaRN9benchmark5StateEENKUliE0_clEi():
+  0.21 │      push   %rbp
+ 25.43 │      mov    %rsp,%rbp
+  3.31 │      mov    %rdi,-0x8(%rbp)
+  0.16 │      mov    %esi,-0xc(%rbp)
+ 12.88 │      mov    $0x200,%eax
+ 29.61 │      cmpl   $0x200,-0xc(%rbp)
+ 21.14 │      cmovle -0xc(%rbp),%eax
+  0.11 │      pop    %rbp
+  7.15 │    ← retq
+```
+
+The same as our implementation with vectors, we are still using a `cmovle` for our clamp instead of a branch.
+
+Let's see how our performance compares to our previous three implementations:
+
+```
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+clamp_bench_raw_ptr_lambda/8         553 ns          552 ns      1159259
+clamp_bench_raw_ptr_lambda/9        1127 ns         1088 ns       643189
+clamp_bench_raw_ptr_lambda/10       2199 ns         2168 ns       322517
+```
+
+Our performance is only worse than using raw pointers and writing our own for loop! Based on our generated assembly, this is likely because we still have some lingering C++ operator overhead that doesn't exists in that implementation.
+
+### -O0 Optimization Summary
+
+So what did we learn in this section? From our initial measurements, writing code in a more C-style seems to be faster (and significantly!). However, let's keep in mind this is *WITHOUT OPTIMIZATIONS*. This not a typical situation (except when debugging). Let's continue our experiments with `-O1` optimizations in the next section.
+
+## Clamp at -O1 Optimization
+
+Now that we have a solid understanding about our performance with un-optimized code, let's enabled -O1 optimziations. For GCC, this enables the following optimization flags:
+
+```
+-fauto-inc-dec
+-fbranch-count-reg
+-fcombine-stack-adjustments
+-fcompare-elim
+-fcprop-registers
+-fdce
+-fdefer-pop
+-fdelayed-branch
+-fdse
+-fforward-propagate
+-fguess-branch-probability
+-fif-conversion
+-fif-conversion2
+-finline-functions-called-once
+-fipa-profile
+-fipa-pure-const
+-fipa-reference
+-fipa-reference-addressable
+-fmerge-constants
+-fmove-loop-invariants
+-fomit-frame-pointer
+-freorder-blocks
+-fshrink-wrap
+-fshrink-wrap-separate
+-fsplit-wide-types
+-fssa-backprop
+-fssa-phiopt
+-ftree-bit-ccp
+-ftree-ccp
+-ftree-ch
+-ftree-coalesce-vars
+-ftree-copy-prop
+-ftree-dce
+-ftree-dominator-opts
+-ftree-dse
+-ftree-forwprop
+-ftree-fre
+-ftree-phiprop
+-ftree-pta
+-ftree-scev-cprop
+-ftree-sink
+-ftree-slsr
+-ftree-sra
+-ftree-ter
+-funit-at-a-time
+```
+
+All of these benchmarks were compiled using the following command:
+
+```bash
+g++ clamp_bench.cpp -lbenchmark -lpthread -O1 -o clamp
+```
+
+### Clamp w/ Vectors
+
+Let's re-evaluate our clamp benchmark that uses `std::vector` containers and for-loop for our clamp function. Here is the generated assembly with `-O1` optimizations enabled:
+
+```
+ 23.13 │246:┌─→cmpl    $0x200,(%rcx,%rax,4) 
+  2.01 │    │  mov     %esi,%edi            
+ 15.36 │    │  cmovle  (%rcx,%rax,4),%edi   
+ 10.47 │    │  mov     0x30(%rsp),%rdx    
+ 12.63 │    │  mov     %edi,(%rdx,%rax,4) 
+  2.44 │    │  add     $0x1,%rax          
+  4.48 │    │  mov     0x10(%rsp),%rcx    
+ 10.25 │    │  mov     0x18(%rsp),%rdx    
+ 10.59 │    │  sub     %rcx,%rdx          
+  2.42 │    │  sar     $0x2,%rdx          
+  0.01 │    ├──cmp     %rdx,%rax          
+  4.50 │    └──jb      246                
+```
+
+Much better! Our compiler was able to get rid of our `::operator[]` overhead for accessing our vector, and turn our branch into a `cmovle` instrction. Let's see how much our performance improved:
+
+```
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+clamp_bench/8                        201 ns          201 ns      3447808
+clamp_bench/9                        399 ns          399 ns      1764295
+clamp_bench/10                       798 ns          798 ns       867648
+```
+
+Much better! Trimming that overhead and changing to a `cmovle` instruction made each test about 10x faster!
+
+### Clamp with Raw Pointers
+
+Let's re-evaluate our clamp with raw pointers and for-loop. Here is the generated assembly with `-O1` optimizations enabled:
+
+```
+ 49.04 │1ff:┌─→cmpl    $0x200,(%rbx,%rax,4)                                    
+  0.03 │    │  mov     %ecx,%edx                                               
+  0.55 │    │  cmovle  (%rbx,%rax,4),%edx                                      
+ 49.79 │    │  mov     %edx,0x0(%rbp,%rax,4)                                   
+  0.02 │    │  add     $0x1,%rax                                               
+       │    ├──cmp     %rsi,%rax                                                   
+       │    └──jne     1ff                                                         
+```
+
+An even-tighter inner-loop! We still have a `cmovle` instruction, and our optimizations trimmed away quite a few instructions!
+
+Now let's see if this improved our performance:
+
+```
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+clamp_bench/8                        201 ns          201 ns      3447808
+clamp_bench/9                        399 ns          399 ns      1764295
+clamp_bench/10                       798 ns          798 ns       867648
+clamp_bench_raw_ptr/8                116 ns          116 ns      6026730
+clamp_bench_raw_ptr/9                226 ns          226 ns      3071095
+clamp_bench_raw_ptr/10               456 ns          456 ns      1539512
+```
+
+Somewhere between 4x and 5x faster than when we compiled with `-O0` optimizations, and about 2x as fast as our implementations with `std::vector` and a for-loop.
+
+### Clamp with Vectors and std::transform
+
+Now let's see how our worst-performing implementation faired with `-O1` optimizations enabled. Here's our new assembly:
+
+```
+ 48.00 │1d0:┌─→cmpl    $0x200,(%rdx,%rax,1)                     
+  0.02 │    │  mov     %r8d,%ecx                                
+  1.15 │    │  cmovle  (%rdx,%rax,1),%ecx                       
+ 49.59 │    │  mov     %ecx,(%rdi,%rax,1)                       
+  0.03 │    │  add     $0x4,%rax                                
+       │    ├──cmp     %rsi,%rax                                
+       │    └──jne     1d0                                      
+```
+
+Very similar to our clamp benchmark with raw pointers and a for-loop with `-O1` optimizations enabled! Let's measure the performance:
+
+```
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+clamp_bench_lambda/8                 117 ns          117 ns      6026575
+clamp_bench_lambda/9                 227 ns          227 ns      3056295
+clamp_bench_lambda/10                510 ns          510 ns      1357904
+```
+
+As you probably expected, the performance is about the same as our clamp benchmark with raw pointers and a for-loop with `-O1` optimizations enabled.
+
+### Clamp with Raw Pointers and std::transform
+
+Let's see if we still get better performance by using raw pointers with `std::transform`. Here is the generated assembly:
+
+```
+ 48.89 │1e8:┌─→cmpl    $0x200,(%rbx,%rax,1)                 
+  0.03 │    │  mov     %ecx,%edx                            
+  1.12 │    │  cmovle  (%rbx,%rax,1),%edx                   
+ 48.94 │    │  mov     %edx,0x0(%rbp,%rax,1)                
+  0.01 │    │  add     $0x4,%rax                            
+       │    ├──cmp     %rax,%r12                            
+       │    └──jne     1e8                                  
+```
+
+Again, almost the exact same assembly. Let's check the performance just to make sure nothing else is going on:
+
+```
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+clamp_bench_raw_ptr_lambda/8         115 ns          115 ns      6017905
+clamp_bench_raw_ptr_lambda/9         226 ns          226 ns      3078079
+clamp_bench_raw_ptr_lambda/10        509 ns          509 ns      1355150
+```
+
+Looks good! Only our implementation using `std::vector` and a hand-rolled for-loop is still under-performing.
+
+### -O1 Optimization Summary
+
+What we've seen so far is that using things like STL containers and algorithms can have substantial overheads, but largely dissapear when you enable even basic optimizations. In the next section, we'll continue by enabling `-O2` optimizations for our benchmarks.
+
+## Clamp at -O2 Optimization
+
+When we enable `-O2` optimizations, we get all the previous optimizations enabled, along with the following flags in GCC:
+
+```
+-falign-functions  -falign-jumps 
+-falign-labels  -falign-loops 
+-fcaller-saves 
+-fcode-hoisting 
+-fcrossjumping 
+-fcse-follow-jumps  -fcse-skip-blocks 
+-fdelete-null-pointer-checks 
+-fdevirtualize  -fdevirtualize-speculatively 
+-fexpensive-optimizations 
+-ffinite-loops 
+-fgcse  -fgcse-lm  
+-fhoist-adjacent-loads 
+-finline-functions 
+-finline-small-functions 
+-findirect-inlining 
+-fipa-bit-cp  -fipa-cp  -fipa-icf 
+-fipa-ra  -fipa-sra  -fipa-vrp 
+-fisolate-erroneous-paths-dereference 
+-flra-remat 
+-foptimize-sibling-calls 
+-foptimize-strlen 
+-fpartial-inlining 
+-fpeephole2 
+-freorder-blocks-algorithm=stc 
+-freorder-blocks-and-partition  -freorder-functions 
+-frerun-cse-after-loop  
+-fschedule-insns  -fschedule-insns2 
+-fsched-interblock  -fsched-spec 
+-fstore-merging 
+-fstrict-aliasing 
+-fthread-jumps 
+-ftree-builtin-call-dce 
+-ftree-pre 
+-ftree-switch-conversion  -ftree-tail-merge 
+-ftree-vrp
+```
+
+`-O2` enables nearly all optimizations, as long as they don't involve a space-speed tradeoff.
+
+
+All of these benchmarks were compiled using the following command:
+
+```bash
+g++ clamp_bench.cpp -lbenchmark -lpthread -O2 -o clamp
+```
+
+### Benchmark Results
+
+Unlike the previous optimization levels, we will no-longer be breaking down our analysis by our 4 benchmarks. Why? They generate about the same assembly, and have the same performance!
+
+Let's use the most-C++ of our implementations (using `std::vector` containers and `std::transform`) for the reaminder of our experiments. Here is the generated assembly:
+
+```
+ 49.05 │2a0:┌─→cmpl    $0x200,(%rdx,%rax,1)                        
+  0.01 │    │  mov     %esi,%ecx                                   
+  1.21 │    │  cmovle  (%rdx,%rax,1),%ecx                          
+ 48.38 │    │  mov     %ecx,(%r8,%rax,1)                           
+  0.01 │    │  add     $0x4,%rax                                   
+       │    ├──cmp     %rdi,%rax                                   
+       │    └──jne     2a0                                         
+```
+
+The exact same assembly as we had with `-O1` optimizations. Here are the performance numbers:
+
+```
+----------------------------------------------------------------
+Benchmark                      Time             CPU   Iterations
+----------------------------------------------------------------
+clamp_bench_lambda/8         119 ns          119 ns      5874782
+clamp_bench_lambda/9         232 ns          232 ns      2998641
+clamp_bench_lambda/10        521 ns          521 ns      1336188
+```
+
+We get the about same performance as previouslly reported!
+
+### -O2 Optimization Summary
+
+Do `-O2` optimizations help at all? Yes, absolutely! However, we are optimizing an incredibly simple operation (a clamp function). With such a simple operation, there is a finite set of optimizations we can apply, and none of those in the `-O2` category may have been applicable.
+
+We'll continue our exploration with -O3 optimizations in the next section.
+
+## Clamp at -O3 Optimization
+
+When we enabled `-O3` optimizations, we get all the previous optimization, plus the following flags in GCC:
+
+```
+-fgcse-after-reload
+-fipa-cp-clone
+-floop-interchange
+-floop-unroll-and-jam
+-fpeel-loops
+-fpredictive-commoning
+-fsplit-loops
+-fsplit-paths
+-ftree-loop-distribution
+-ftree-loop-vectorize
+-ftree-partial-pre
+-ftree-slp-vectorize
+-funswitch-loops
+-fvect-cost-model
+-fvect-cost-model=dynamic
+-fversion-loops-for-strides
+```
+
+We have some very important optimizations at this level (e.g., vectorization).
+
+Our benchmark was compiled using the following command:
+
+```bash
+g++ clamp_bench.cpp -lbenchmark -lpthread -O3 -o clamp
+```
+
+As a reminder, we wll only be looking at a single benchmark since they all now generate the same assembly.
+
+### Benchmark Results
+
+Let's see how our assembly changed when we enabled `-O3` optimizations:
+
+```
+ 18.70 │290:┌─→movdqu  0x0(%rbp,%rax,1),%xmm0                               ▒
+  1.39 │    │  movdqu  0x0(%rbp,%rax,1),%xmm3                               ▒
+ 16.98 │    │  movdqa  %xmm1,%xmm2                                          ▒
+  2.73 │    │  pcmpgtd %xmm1,%xmm0                                          ▒
+ 17.90 │    │  pand    %xmm0,%xmm2                                          ▒
+  1.56 │    │  pandn   %xmm3,%xmm0                                          ▒
+ 18.13 │    │  por     %xmm2,%xmm0                                          ▒
+  1.50 │    │  movups  %xmm0,(%r12,%rax,1)                                  ▒
+ 17.72 │    │  add     $0x10,%rax                                           ▒
+  0.03 │    ├──cmp     %rdx,%rax                                            ▒
+  1.40 │    └──jne    
+```
+
+Our assembly finally changed! What happened? Our compiler vectorized the code. Vectorization allows our processor to process multiple elements with a single instruction. In this case, we're packing 4 elements at a time into our 128-bit `xmm` register. Let's see how this changed our performance:
+
+```
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+clamp_bench_lambda/8                36.5 ns         36.5 ns     19224165
+clamp_bench_lambda/9                78.2 ns         78.2 ns      8927309
+clamp_bench_lambda/10                154 ns          154 ns      4508519
+```
+
+Quite a significant improvement! In fact, almost 4x faster! But this is somewhat to be expected. If we're now using instructions that process 4 elements at a time, we would optimistically expect a 4x speedup.
+
+### -O3 Optimization Summary
+
+Vectorization can have a huge impact on performance, as seen in this example. However, many things can get into the way of the auto-vectorizer (e.g., aliasing) that can prevent vectorization. In the next section, we'll look at a few additional flags we can pass to our compiler in addition to changing the optimization level.
+
+## Clamp at -O3 Optimization with Native Tuning
+
+One final thing we will try are the `-march=native` and `-mtune=native` flags. These flags informs the compiler to produce code for the system's processor architecture, tune for the native architecture respectively. 
+
+Our benchmark was compiled using the following command:
+
+```bash
+g++ clamp_bench.cpp -lbenchmark -lpthread -O3 -march=native -mtune=native -o clamp
+```
+
+### Benchmark Results
+
+Let's see if compiling and tuning for the native architecture made any difference in our performance. Here is the generated assembly:
+
+```
+ 46.07 │2c8:┌─→vpminsd    (%r12,%rax,1),%ymm1,%ymm0                     
+ 14.49 │    │  vmovdqu    %ymm0,0x0(%r13,%rax,1)                        
+ 18.79 │    │  add        $0x20,%rax                                    
+  0.26 │    ├──cmp        %rax,%rcx                                     
+ 18.78 │    └──jne        2c8                                           
+```
+
+Two important changes! For one, we're using 256-bit vector instructions (`ymm` registers are 256 bits) which process 8 integers at a time instead of the 4 we were previously. Secondly, we have fewer instructions, because we're using `vpminsd`, a dedicated instruction for extracting the minimum of packed numbers. Let's see how this changes performance:
+
+```
+------------------------------------------------------------------------
+Benchmark                              Time             CPU   Iterations
+------------------------------------------------------------------------
+clamp_bench_lambda/8                10.6 ns         10.6 ns     66181966
+clamp_bench_lambda/9                19.4 ns         19.4 ns     36134751
+clamp_bench_lambda/10               57.3 ns         57.3 ns     12117304
+```
+
+Another ~3-4x performance improvement (somewhat expected based on the changes in the assembly)!
+
+### -O3 Optimization with Native Tuning Summary
+
+Without informing the compiler about the architecture it is compiling for, it has to be conservative, and not use any features that aren't supported. Telling our compiler to perform native tuning for clamp benchmark meant that it generated 8-wide, instead of 4-wide SIMD instructions, and used a dedicated instruction for extracting minimums from packed numbers.
+
 ## Final Thoughts
+
+Code can change drastically at different optimization levels, and with different optimization flags. Understanding how these optimizations work can help us improve the performance of our applications, and guide how we write code in our high-level languages. One important parting thought is this. Before you try and perfrom micro-optimizations yourself, make sure the compiler doesn't have a switch that will do it for you (and maybe much more!).
 
 Thanks for reading,
 
