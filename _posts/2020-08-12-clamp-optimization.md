@@ -33,7 +33,7 @@ For each element in an array/vector, we compare the input to the ceiling. If the
 
 ## Clamp at -O0 Optimization
 
-Let's start our journey by looking at some un-optimized code. When we compile using gcc w/o and optimization flags, it defaults to the -O0 optimization level which generates unoptimized code. Let's compare the results of a few different C++ implementations of our clamp function.
+Let's start our journey by looking at some un-optimized code. When we compile using gcc without any optimization flags, it defaults to the -O0 optimization level which generates unoptimized code. Let's compare the results of a few different C++ implementations of our clamp function.
 
 All of these benchmarks were compiled using the following command:
 
@@ -41,7 +41,7 @@ All of these benchmarks were compiled using the following command:
 g++ clamp_bench.cpp -lbenchmark -lpthread -O0 -o clamp
 ```
 
-### Clamp w/ Vectors
+### Clamp with Vectors
 
 This implementation of our clamp function uses a for loop to clamp the vectors from an input vector, and store the results into an output vector.
 
@@ -478,7 +478,7 @@ All of these benchmarks were compiled using the following command:
 g++ clamp_bench.cpp -lbenchmark -lpthread -O1 -o clamp
 ```
 
-### Clamp w/ Vectors
+### Clamp with Vectors
 
 Let's re-evaluate our clamp benchmark that uses `std::vector` containers and for-loop. Here is the generated assembly with `-O1` optimizations enabled:
 
