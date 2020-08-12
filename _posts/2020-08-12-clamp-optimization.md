@@ -14,6 +14,10 @@ Modern processors are incredibly complex, and writing functionally correct code 
 - [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
 - My Email: CoffeeBeforeArch@gmail.com
 
+### Misc. Links
+
+For more detail about the GCC optimization flags, check out [this](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html) link.
+
 ## The Clamp Function
 
 Before we start looking at optimizations, we need to understand the function we're optimizing. We'll be studying a clamp function in thei blog post. A clamp function simply clamps a given unput number to a range of values. In this case, we'll be looking at a function that clamps an integer to a maximum value (as opposed to a clamp function that clamps both an upper and lower bound).
@@ -36,8 +40,6 @@ All of these benchmarks were compiled using the following command:
 ```bash
 g++ clamp_bench.cpp -lbenchmark -lpthread -O0 -o clamp
 ```
-
-For more detail about the GCC optimization flags, check out [this](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html) link.
 
 ### Clamp w/ Vectors
 
@@ -71,7 +73,7 @@ This implementation of our clamp function uses a for loop to clamp the vectors f
 
 And here is the output assembly:
 
-```
+```assembly
   3.34 │307:┌─→lea     -0x2780(%rbp),%rax                                         ▒
        │    │  mov     %rax,%rdi                                                  ▒
   1.53 │    │→ callq   std::vector<int, std::allocator<int> >::size               ▒
@@ -162,7 +164,7 @@ BENCHMARK(clamp_bench_raw_ptr)->DenseRange(8, 10);
 
 And here is the output assembly:
 
-```
+```assembly
  14.20 │32e:┌─→mov     -0x27b0(%rbp),%eax                                                 ▒
   0.57 │    │  cmp     -0x27ac(%rbp),%eax                                                 ▒
        │    │↓ jge     38b                                                                ▒
@@ -239,7 +241,7 @@ This is functionally the same as our previous two implementations, but now we're
 
 Let's take a look at the assembly:
 
-```
+```assembly
        │    000000000000b622 <__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > > std::transform<__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, __gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, clamp_bench_lambda(benchmark::State&)::{lambda(int)#2}>(__gnu_cxx::__normal_it
        │    _ZSt9transformIN9__gnu_cxx17__normal_iteratorIPiSt6vectorIiSaIiEEEES6_ZL18clamp_bench_lambdaRN9benchmark5StateEEUliE0_ET0_T_SC_SB_T1_():
        │      endbr64
@@ -288,7 +290,7 @@ Let's take a look at the assembly:
 
 Let's parse what's going on here. Each iteration of the loop, we access our input and output elements through our vector iterators with `::operator*`. Our input is then clamped with a call to our lambda. After we store the result, we move to the next element in our iterators using `::operator++`. Let's look at the code generated for our clamp lambda in greater detail:
 
-```
+```assembly
        │    000000000000ac00 <clamp_bench_lambda(benchmark::State&)::{lambda(int)#2}::operator()(int) const>:
        │    _ZZL18clamp_bench_lambdaRN9benchmark5StateEENKUliE0_clEi():
  29.45 │      push   %rbp
@@ -306,7 +308,7 @@ Very similar to our raw pointer implementation. Instead of a branch, our compile
 
 Now let's check out the performance:
 
-```
+```assembly
 ------------------------------------------------------------------------
 Benchmark                              Time             CPU   Iterations
 ------------------------------------------------------------------------
@@ -354,7 +356,7 @@ BENCHMARK(clamp_bench_raw_ptr_lambda)->DenseRange(8, 10);
 
 Let's see how our assembly changed using raw pointers:
 
-```
+```assembly
        │    000000000000b6ec <int* std::transform<int*, int*, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}>(int*, int*, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}, clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2})>:
        │    _ZSt9transformIPiS0_ZL26clamp_bench_raw_ptr_lambdaRN9benchmark5StateEEUliE0_ET0_T_S6_S5_T1_():                                                                                                                         
   0.05 │      endbr64                                                                                                                                                                            
@@ -385,7 +387,7 @@ Let's see how our assembly changed using raw pointers:
 
 Much more clean than our implementation using vectors. Now, our `std::transform` accesses memory directly rather than calling the iterator dereference operator. However, we still see a call to our clamp lambda. Here is how our clamp was implemented:
 
-```
+```assembly
        │    000000000000b09a <clamp_bench_raw_ptr_lambda(benchmark::State&)::{lambda(int)#2}::operator()(int) const>:
        │    _ZZL26clamp_bench_raw_ptr_lambdaRN9benchmark5StateEENKUliE0_clEi():
   0.21 │      push   %rbp
@@ -422,7 +424,7 @@ So what did we learn in this section? From our initial measurements, writing cod
 
 Now that we have a solid understanding about our performance with un-optimized code, let's enabled -O1 optimziations. For GCC, this enables the following optimization flags:
 
-```
+```bash
 -fauto-inc-dec
 -fbranch-count-reg
 -fcombine-stack-adjustments
@@ -480,7 +482,7 @@ g++ clamp_bench.cpp -lbenchmark -lpthread -O1 -o clamp
 
 Let's re-evaluate our clamp benchmark that uses `std::vector` containers and for-loop. Here is the generated assembly with `-O1` optimizations enabled:
 
-```
+```assembly
  23.13 │246:┌─→cmpl    $0x200,(%rcx,%rax,4) 
   2.01 │    │  mov     %esi,%edi            
  15.36 │    │  cmovle  (%rcx,%rax,4),%edi   
@@ -495,7 +497,7 @@ Let's re-evaluate our clamp benchmark that uses `std::vector` containers and for
   4.50 │    └──jb      246                
 ```
 
-Much better! Our compiler was able to get rid of our `::operator[]` overhead and turn our branch into a `cmovle` instrction. Let's see how much our performance improved:
+Much better! Our compiler was able to get rid of our `::operator[]` overhead and turn our branch into a `cmovle` instruction. Let's see how much our performance improved:
 
 ```
 ------------------------------------------------------------------------
@@ -512,7 +514,7 @@ Much better! Trimming that overhead and changing to a `cmovle` instruction made 
 
 Let's now re-evaluate our clamp with raw pointers and for-loop. Here is the generated assembly with `-O1` optimizations enabled:
 
-```
+```assembly
  49.04 │1ff:┌─→cmpl    $0x200,(%rbx,%rax,4)                                    
   0.03 │    │  mov     %ecx,%edx                                               
   0.55 │    │  cmovle  (%rbx,%rax,4),%edx                                      
@@ -541,7 +543,7 @@ Somewhere between 4x and 5x faster than when we compiled with `-O0` optimization
 
 Now let's see how our worst-performing implementation faired with `-O1` optimizations enabled. Here's our new assembly:
 
-```
+```assembly
  48.00 │1d0:┌─→cmpl    $0x200,(%rdx,%rax,1)                     
   0.02 │    │  mov     %r8d,%ecx                                
   1.15 │    │  cmovle  (%rdx,%rax,1),%ecx                       
@@ -568,7 +570,7 @@ As you probably expected, the performance is similar to our last example, beacus
 
 Let's see if we still get better performance by using raw pointers with `std::transform`. Here is the generated assembly:
 
-```
+```assembly
  48.89 │1e8:┌─→cmpl    $0x200,(%rbx,%rax,1)                 
   0.03 │    │  mov     %ecx,%edx                            
   1.12 │    │  cmovle  (%rbx,%rax,1),%edx                   
@@ -580,7 +582,7 @@ Let's see if we still get better performance by using raw pointers with `std::tr
 
 More of the same assembly we saw previously. Let's check the performance just to make sure nothing else is going on:
 
-```
+```assembly
 ------------------------------------------------------------------------
 Benchmark                              Time             CPU   Iterations
 ------------------------------------------------------------------------
@@ -599,7 +601,7 @@ What we've seen so far is that using things like STL containers and algorithms c
 
 When we enable `-O2` optimizations, we get all the previous optimizations enabled, along with the following flags in GCC:
 
-```
+```bash
 -falign-functions  -falign-jumps 
 -falign-labels  -falign-loops 
 -fcaller-saves 
@@ -652,7 +654,7 @@ Unlike the previous optimization levels, we will no-longer be analyzing 4 benchm
 
 Let's use the most-C++ of our implementations (using `std::vector` containers and `std::transform`) for the reaminder of our experiments. Here is the generated assembly for that benchmark:
 
-```
+```assembly
  49.05 │2a0:┌─→cmpl    $0x200,(%rdx,%rax,1)                        
   0.01 │    │  mov     %esi,%ecx                                   
   1.21 │    │  cmovle  (%rdx,%rax,1),%ecx                          
@@ -685,7 +687,7 @@ We'll continue our exploration with -O3 optimizations in the next section.
 
 When we enabled `-O3` optimizations, we get all the previous optimization, plus the following flags in GCC:
 
-```
+```bash
 -fgcse-after-reload
 -fipa-cp-clone
 -floop-interchange
@@ -718,7 +720,7 @@ As a reminder, we wll only be looking at a single benchmark since they all now g
 
 Let's see if our assembly changed when we enabled `-O3` optimizations:
 
-```
+```assembly
  18.70 │290:┌─→movdqu  0x0(%rbp,%rax,1),%xmm0                               ▒
   1.39 │    │  movdqu  0x0(%rbp,%rax,1),%xmm3                               ▒
  16.98 │    │  movdqa  %xmm1,%xmm2                                          ▒
@@ -763,7 +765,7 @@ g++ clamp_bench.cpp -lbenchmark -lpthread -O3 -march=native -mtune=native -o cla
 
 Let's see if compiling and tuning for the native architecture made any difference in our performance. Here is the generated assembly:
 
-```
+```assembly
  46.07 │2c8:┌─→vpminsd    (%r12,%rax,1),%ymm1,%ymm0                     
  14.49 │    │  vmovdqu    %ymm0,0x0(%r13,%rax,1)                        
  18.79 │    │  add        $0x20,%rax                                    
@@ -786,7 +788,7 @@ Another ~3-4x performance improvement (somewhat expected based on the changes in
 
 ### -O3 Optimization with Native Tuning Summary
 
-Without informing the compiler about the architecture it is compiling for, it has to be conservative, and it will not use any features (e.g. wider SIMD instruction) that it doens't know is supported). Telling our compiler to perform native tuning for our clamp benchmark meant that it knew it could generated 8-wide SIMD instructions, and use a dedicated instruction for extracting minimums from packed numbers.
+Without informing the compiler about the architecture it is compiling for, it has to be conservative, and it will not use any features (e.g. wider SIMD instruction) that it doens't know are supported. Telling our compiler to perform native tuning for our clamp benchmark meant that it knew it could generated 8-wide SIMD instructions, and use a dedicated instruction for extracting minimums from packed numbers.
 
 ## Final Thoughts
 
