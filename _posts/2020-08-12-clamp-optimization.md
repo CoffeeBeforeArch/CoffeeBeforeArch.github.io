@@ -5,7 +5,7 @@ title: Compiler Optimization of a Clamp Function
 
 # Compiler Optimization of a Clamp Function
 
-Modern processors are incredibly complex, and writing functionally correct code for even a moderately complex application can be a painful and teadious endeavor. Luckily for us, we have compilers that allow us to write code in high level languages like C++ that produce not just correct code, but highly optimized code as well. In this blog post, we'll be looking at a simple clamp benchmark, and compiling it at different optimization levels, and with different optimization flags. We'll then look at both the performance and generated assembly for each experiment to understand how things change based on the compiler optimizations.
+Modern processors are incredibly complex, and writing functionally correct code for even a moderately complex application can be a painful and teadious endeavor. Luckily for us, we have compilers that allow us to write code in high level languages like C++ and generate assembly that is both functionally correct code and highly optimized. In this blog post, we'll be looking at a simple clamp benchmark, and compiling it at different optimization levels, and with different optimization flags. We'll then look at both the performance and generated assembly from each experiment, and try to understand how things change based on the compiler options.
 
 ### Link to the source code
 
@@ -20,7 +20,7 @@ For more detail about the GCC optimization flags, check out [this](https://gcc.g
 
 ## The Clamp Function
 
-Before we start looking at optimizations, we need to understand the function we're optimizing. We'll be studying a clamp function in thei blog post. A clamp function simply clamps a given unput number to a range of values. In this case, we'll be looking at a function that clamps an integer to a maximum value (as opposed to a clamp function that clamps both an upper and lower bound).
+Before we start looking at optimizations, we need to understand the function we're optimizing. We'll be studying a clamp function in this blog post. A clamp function simply clamps a given unput number to a range of values. In this case, we'll be looking at a function that clamps an integer to a maximum value (as opposed to a clamp function that clamps to an upper and lower bound).
 
 Here's an example implementation in C++:
 
@@ -29,11 +29,11 @@ for (int i = 0; i < N; i++)
   v_out[i] = (v_in[i] > ceiling) ? ceiling : v_in[i];
 ```
 
-For each element in an array/vector, we compare the input to the ceiling. If the input is greater than the ceiling, we store ceiling in the output array/vector. Otherwise, we store the input value to the output array/vector.
+For each element in an array/vector, we compare the input to the ceiling. If the input is greater than the ceiling, we store ceiling in the output array/vector. Otherwise, we store the input value.
 
 ## Clamp at -O0 Optimization
 
-Let's start our journey by looking at some un-optimized code. When we compile using gcc without any optimization flags, it defaults to the -O0 optimization level which generates unoptimized code. Let's compare the results of a few different C++ implementations of our clamp function.
+Let's start our journey by looking at some un-optimized code. When we compile using gcc without any optimization flags, it defaults to the -O0 optimization level, which generates unoptimized code. Let's compare the results of a few different C++ implementations of our clamp function.
 
 All of these benchmarks were compiled using the following command:
 
@@ -43,7 +43,7 @@ g++ clamp_bench.cpp -lbenchmark -lpthread -O0 -o clamp
 
 ### Clamp with Vectors
 
-This implementation of our clamp function uses a for loop to clamp the vectors from an input vector, and store the results into an output vector.
+This implementation of our clamp function uses `std::vector` containers and a for-loop.
 
 ```cpp
  // Benchmark for a clamp function
@@ -107,11 +107,11 @@ And here is the output assembly:
   1.56 │    └──jmpq    307                                                        
 ```
 
-Seems like a lot of assembly for such simple operation, but remember, this is largely unoptimized. Let's break it down into some key key components.
+This seems like a lot of assembly for such simple operation. However, we must remember that this code is largely unoptimized. Let's break it down into some key components.
 
-First, we see a call to `std::vector<int, std::allocator<int> >::size` each iteration of our loop. This is our for-loop's condition range check (notice, our compiler didn't hoist this loop invariant).
+First, we see a call to `std::vector<int, std::allocator<int> >::size` each iteration of our loop. This is our for-loop's condition check (notice, our compiler didn't hoist this loop invariant).
 
-Next, we see three calls to `::operator[]`. Remember, a vector is really just a class that implements the `[]` operator, which is just another method. The first call to the `[]` operator is our read of `v_in`. The remaining two `[]` operators are for writing to `v_out` (one for if we have to clamp the input, and the other if we don't).
+Next, we see three calls to `::operator[]`. A vector is really just a class that implements the `[]` operator, and operators act just like any other method. The first call to the `[]` operator is our read of `v_in`. The remaining two `[]` operators are for writing to `v_out` (one for if we have to clamp the input, and the other for if we don't).
 
 Now let's look at the performance:
 
