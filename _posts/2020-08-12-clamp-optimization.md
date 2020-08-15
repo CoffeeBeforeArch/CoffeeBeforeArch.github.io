@@ -63,7 +63,7 @@ This implementation of our clamp function uses `std::vector` containers and a fo
  
    // Main benchmark loop
    for (auto _ : s) {
-     for (std::size_t i = 0; i < v_in.size(); i++) {
+     for (int i = 0; i < N; i++) {
        v_out[i] = (v_in[i] > 512) ? 512 : v_in[i];
      }
    }
@@ -74,44 +74,41 @@ This implementation of our clamp function uses `std::vector` containers and a fo
 And here is the output assembly:
 
 ```assembly
-  3.34 │307:┌─→lea     -0x2780(%rbp),%rax                                         
-       │    │  mov     %rax,%rdi                                                  
-  1.53 │    │→ callq   std::vector<int, std::allocator<int> >::size               
-  0.31 │    │  cmp     %rax,-0x27e0(%rbp)                                         
-  1.64 │    │  setb    %al                                                        
-  3.53 │    │  test    %al,%al                                                    
-       │    │↓ je      390                                                        
-       │    │  mov     -0x27e0(%rbp),%rdx                                         
-  0.14 │    │  lea     -0x2780(%rbp),%rax                                         
-  1.18 │    │  mov     %rdx,%rsi                                                  
-  3.36 │    │  mov     %rax,%rdi                                                  
-  0.14 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         
-  8.44 │    │  mov     (%rax),%eax                                                
-  1.03 │    │  cmp     $0x200,%eax                                                
-  1.24 │    │↓ jg      363                                                        
- 17.13 │    │  mov     -0x27e0(%rbp),%rdx                                         
-  0.32 │    │  lea     -0x2780(%rbp),%rax                                         
-  0.78 │    │  mov     %rdx,%rsi                                                  
-  0.62 │    │  mov     %rax,%rdi                                                  
-  2.73 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         
-  7.38 │    │  mov     (%rax),%ebx                                                
-  0.55 │    │↓ jmp     368                                                        
- 18.42 │363:│  mov     $0x200,%ebx                                                
-  5.05 │368:│  mov     -0x27e0(%rbp),%rdx                                         
-  0.36 │    │  lea     -0x2760(%rbp),%rax                                         
-  3.13 │    │  mov     %rdx,%rsi                                                  
-  0.60 │    │  mov     %rax,%rdi                                                  
-  2.47 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]         
- 12.72 │    │  mov     %ebx,(%rax)                                                
-  0.09 │    │  addq    $0x1,-0x27e0(%rbp)                                         
-  1.56 │    └──jmpq    307                                                        
+  1.77 │306:┌─→mov     -0x27e0(%rbp),%eax                                           
+  0.30 │    │  cmp     -0x27dc(%rbp),%eax                                           
+       │    │↓ jge     382                                                          
+  2.39 │    │  mov     -0x27e0(%rbp),%eax                                           
+  1.96 │    │  movslq  %eax,%rdx                                                    
+  1.92 │    │  lea     -0x2780(%rbp),%rax                                           
+  0.33 │    │  mov     %rdx,%rsi                                                    
+  1.72 │    │  mov     %rax,%rdi                                                    
+  3.57 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]           
+ 13.36 │    │  mov     (%rax),%eax                                                  
+  2.45 │    │  cmp     $0x200,%eax                                                  
+  2.59 │    │↓ jg      357                                                          
+ 13.52 │    │  mov     -0x27e0(%rbp),%eax                                           
+  0.62 │    │  movslq  %eax,%rdx                                                    
+  0.57 │    │  lea     -0x2780(%rbp),%rax                                           
+  1.98 │    │  mov     %rdx,%rsi                                                    
+  0.06 │    │  mov     %rax,%rdi                                                    
+  2.08 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]           
+  4.12 │    │  mov     (%rax),%ebx                                                  
+  2.43 │    │↓ jmp     35c                                                          
+ 13.62 │357:│  mov     $0x200,%ebx                                                  
+  2.99 │35c:│  mov     -0x27e0(%rbp),%eax                                           
+  1.13 │    │  movslq  %eax,%rdx                                                    
+  3.25 │    │  lea     -0x2760(%rbp),%rax                                           
+  2.42 │    │  mov     %rdx,%rsi                                                    
+       │    │  mov     %rax,%rdi                                                    
+  4.84 │    │→ callq   std::vector<int, std::allocator<int> >::operator[]           
+  9.64 │    │  mov     %ebx,(%rax)                                                  
+  2.63 │    │  addl    $0x1,-0x27e0(%rbp)                                           
+  1.58 │    └──jmp     306                                                          
 ```
 
-This seems like a lot of assembly for such simple operation. However, we must remember that this code is largely unoptimized. Let's break it down into some key components.
+This seems like a lot of code for just a clamp. However, we must remember that this code is largely unoptimized. Let's break it down into some key components.
 
-First, we see a call to `std::vector<int, std::allocator<int> >::size` each iteration of our loop. This is our for-loop's condition check (notice, our compiler didn't hoist this loop invariant).
-
-Next, we see three calls to `::operator[]`. A vector is really just a class that implements the `[]` operator, and operators act just like any other method. The first call to the `[]` operator is our read of `v_in`. The remaining two `[]` operators are for writing to `v_out` (one for if we have to clamp the input, and the other for if we don't).
+We see three calls to `::operator[]` in our assembly. Remember, A vector is really just a class that implements the `[]` operator, and operators act like any other method or function at the assembly level. The first call to the `[]` operator is to read our input value from `v_in`. The remaining two `[]` operators are for writing to `v_out` (one for if we have to clamp the input, and the other for if we don't). Our clamp is implemented with a simple compare against 512 (`cmp $0x200,%eax`) and `jg` instruction that determines if we store 512 or the value from `v_in`.
 
 Now let's look at the performance:
 
@@ -119,12 +116,12 @@ Now let's look at the performance:
 ------------------------------------------------------------------------
 Benchmark                              Time             CPU   Iterations
 ------------------------------------------------------------------------
-clamp_bench/8                       2066 ns         1947 ns       360128
-clamp_bench/9                       4566 ns         4296 ns       161397
-clamp_bench/10                      9871 ns         9481 ns        74752
+clamp_bench/8                       1361 ns         1361 ns       495944
+clamp_bench/9                       3364 ns         3364 ns       217505
+clamp_bench/10                      7437 ns         7437 ns        91160
 ```
 
-This looks fairly slow, but we won't know for certain until we look at some more data.
+This looks fairly slow, but we won't for certain until we look at our other implementations.
 
 ### Clamp with Raw Pointers
 
@@ -197,18 +194,16 @@ Here are the performance results:
 ------------------------------------------------------------------------
 Benchmark                              Time             CPU   Iterations
 ------------------------------------------------------------------------
-clamp_bench_raw_ptr/8                551 ns          528 ns      1000000
-clamp_bench_raw_ptr/9                860 ns          830 ns       838950
-clamp_bench_raw_ptr/10              1731 ns         1650 ns       426407
+clamp_bench_raw_ptr/8                408 ns          408 ns      1715523
+clamp_bench_raw_ptr/9                803 ns          803 ns       872497
+clamp_bench_raw_ptr/10              1592 ns         1592 ns       439707
 ```
 
-Fairly large (4-5x)! Let's keep track on how this changes as we increase the optimization levels.
+Much faster (by ~4x)! Let's keep track on how this changes as we increase the optimization levels.
 
 ### Clamp with Vectors and std::transform
 
-Another way we can implement our clamp function is using STL algorithm `std::transform` with the a function object for our clamp. 
-
-Here's how that looks like using `std::vector`:
+Another way we can implement our clamp function is using the STL algorithm `std::transform`. Here's how that looks like using `std::vector`:
 
 ```cpp
 // Benchmark for a clamp function
@@ -483,36 +478,33 @@ g++ clamp_bench.cpp -lbenchmark -lpthread -O1 -o clamp
 Let's re-evaluate our clamp benchmark that uses `std::vector` containers and for-loop. Here is the generated assembly with `-O1` optimizations enabled:
 
 ```assembly
- 23.13 │246:┌─→cmpl    $0x200,(%rcx,%rax,4) 
-  2.01 │    │  mov     %esi,%edi            
- 15.36 │    │  cmovle  (%rcx,%rax,4),%edi   
- 10.47 │    │  mov     0x30(%rsp),%rdx    
- 12.63 │    │  mov     %edi,(%rdx,%rax,4) 
-  2.44 │    │  add     $0x1,%rax          
-  4.48 │    │  mov     0x10(%rsp),%rcx    
- 10.25 │    │  mov     0x18(%rsp),%rdx    
- 10.59 │    │  sub     %rcx,%rdx          
-  2.42 │    │  sar     $0x2,%rdx          
-  0.01 │    ├──cmp     %rdx,%rax          
-  4.50 │    └──jb      246                
+  0.54 │247:┌─→mov     0x10(%rsp),%rdx                                       
+ 25.07 │    │  cmpl    $0x200,(%rdx,%rax,1)                                  
+ 10.78 │    │  mov     %esi,%ecx                                             
+ 22.07 │    │  cmovle  (%rdx,%rax,1),%ecx                                    
+  0.12 │    │  mov     0x30(%rsp),%rdx                                       
+ 30.33 │    │  mov     %ecx,(%rdx,%rax,1)                                    
+  0.05 │    │  add     $0x4,%rax                                             
+       │    ├──cmp     %rax,%rdi                                             
+ 10.48 │    └──jne     247                                                   
 ```
 
-Much better! Our compiler was able to get rid of our `::operator[]` overhead and turn our branch into a `cmovle` instruction. Let's see how much our performance improved:
+Much better! Our compiler was able to get rid of our `::operator[]` calls and turn our branch into a `cmovle` instruction. Let's see how much our performance improved:
 
 ```
 ------------------------------------------------------------------------
 Benchmark                              Time             CPU   Iterations
 ------------------------------------------------------------------------
-clamp_bench/8                        201 ns          201 ns      3447808
-clamp_bench/9                        399 ns          399 ns      1764295
-clamp_bench/10                       798 ns          798 ns       867648
+clamp_bench/8                        176 ns          176 ns      3930433
+clamp_bench/9                        346 ns          346 ns      2025628
+clamp_bench/10                       696 ns          696 ns      1006332
 ```
 
-Much better! Trimming that overhead and changing to a `cmovle` instruction made each input size about 10x faster than it was previously!
+Much better! Trimming that overhead and changing to a `cmovle` instruction gave us an 8-10x performance boost!
 
 ### Clamp with Raw Pointers
 
-Let's now re-evaluate our clamp with raw pointers and for-loop. Here is the generated assembly with `-O1` optimizations enabled:
+Let's re-evaluate our clamp with raw pointers and for-loop. Here is the generated assembly with `-O1` optimizations enabled:
 
 ```assembly
  49.04 │1ff:┌─→cmpl    $0x200,(%rbx,%rax,4)                                    
@@ -537,7 +529,7 @@ clamp_bench_raw_ptr/9                226 ns          226 ns      3071095
 clamp_bench_raw_ptr/10               456 ns          456 ns      1539512
 ```
 
-Somewhere between 4x and 5x faster than when we compiled with `-O0` optimizations, and about 2x as fast as our implementations with `std::vector` and a for-loop.
+Somewhere between 4x and 5x faster than when we compiled with `-O0` optimizations, and still a bit faster than our `std::vector` with for-loop implementation.
 
 ### Clamp with Vectors and std::transform
 
@@ -564,11 +556,11 @@ clamp_bench_lambda/9                 227 ns          227 ns      3056295
 clamp_bench_lambda/10                510 ns          510 ns      1357904
 ```
 
-As you probably expected, the performance is similar to our last example, beacuse the assebly is almost the same.
+As you probably expected, the performance is similar to our last example as well!
 
 ### Clamp with Raw Pointers and std::transform
 
-Let's see if we still get better performance by using raw pointers with `std::transform`. Here is the generated assembly:
+Let's see if there is still a benefit of using raw pointers with `std::transform`. Here is our generated assembly:
 
 ```assembly
  48.89 │1e8:┌─→cmpl    $0x200,(%rbx,%rax,1)                 
@@ -595,7 +587,7 @@ Looks good! Only our implementation that uses `std::vector` and a hand-rolled fo
 
 ### -O1 Optimization Summary
 
-What we've seen so far is that using things like STL containers and algorithms can have substantial overheads, but those largely dissapear when you enable just basic optimizations. In the next section, we'll continue our discussion by enabling `-O2` optimizations for our benchmarks and analyzing the results.
+What we've seen so far is that using things like STL containers and algorithms can have substantial overheads, but those largely dissapear when you enable just basic optimizations (through a combination of function inlining and other optimizations). In the next section, we'll continue our discussion by enabling `-O2` optimizations for our benchmarks and analyzing the results.
 
 ## Clamp at -O2 Optimization
 
@@ -640,7 +632,6 @@ When we enable `-O2` optimizations, we get all the previous optimizations enable
 ```
 
 `-O2` enables nearly all optimizations, as long as they don't involve a space-speed tradeoff.
-
 
 The following benchmark was compiled using the following command:
 
