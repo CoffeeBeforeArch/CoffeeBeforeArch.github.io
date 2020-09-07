@@ -178,6 +178,8 @@ The final thing our program does is our `return 0;` statement. It does this by s
 	ret
 ```
 
+Note `popq` is just part of managing the stack stack.
+
 ## Assembly
 
 Our instructions must be translated into machine code by an assembler before our processor can read them. The assembler for GCC is `as` (The GNU Assembler).
@@ -226,7 +228,7 @@ Disassembly of section .text:
 
 We now have our instructions and their hex encoding side-by-side. One important thing to note is that many of our addresses, including those for our `"Hello, world!\n"` string and `cout` have been replaced by placeholders. To understand why, we need to briefly talk about the symbol table.
 
-The symbol table is a map between names (like `cout`) and infromation related to those names. If we dump the symbol table for our object code (using `nm -C hello_world.o`), we get the following:
+The symbol table is a map between names (like `cout`) and information related to those names. If we dump the symbol table for our object code using `nm -C hello_world.o`, we get the following output (note, `-C` gets rid of the C++ name mangling):
 
 ```text
                  U __cxa_atexit
@@ -243,19 +245,19 @@ The symbol table is a map between names (like `cout`) and infromation related to
                  U std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*)
 ```
 
-For each symbol, we get an address, and the symbol type. Many of our symbols are of the `U` type. These means the symbols are undefined, and will need to be resolved in the next phase (linking). Other symbols are of the `T` or `t` type, meaning they live in the text (code) section of the object file. Type `r` symbols were found in the read-only data section, and `b` symbols are in the BSS data section (zero/uninitialized data).
+For each symbol, we get an address, and the symbol type. Many of our symbols are of the `U` type. These means the symbols are undefined, and will need to be resolved in the next phase (linking). Other symbols are of the `T` or `t` type, meaning they live in the text (code) section of the object file. Type `r` symbols are from the read-only data section (like our string), and `b` symbols are in the BSS data section (zero/uninitialized data).
 
 ## Linking
 
 The final step of generating an executable is linking. This is where our object files get linked together, and all our addresses get finalized. The linker for GCC is `ld`. However, GCC will use the `collect2` utility under the hood, which is a wrapper around `ld`.
 
-We can finish linking our program with GCC.
+We can finish linking our program with `g++`. By default, `g++` will automatically link against things like the standard library implementation for GCC, `libstdc++.so`. Here's the final command we'll use:
 
 ```bash
 g++ hello_world.o -o hello_world
 ```
 
-This will give use a fully formed executable! Let's dump the symbol table to see how things have changed after linking:
+This gives us a fully formed executable! Let's dump the symbol table to see how things have changed after linking:
 
 ```text
 0000000000004010 B __bss_start
@@ -301,7 +303,7 @@ This will give use a fully formed executable! Let's dump the symbol table to see
                  U std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*)@@GLIBCXX_3.4
 ```
 
-We now see that our symbol table has grown quite a bit, and symbols like `cout` that where undefined now have final addresses. Let's use `objdump` to see how our assembly has changed:
+We now see that our symbol table has grown quite a bit, and symbols like `cout` that were undefined now have final addresses. Let's use `objdump` to see how our assembly has changed:
 
 ```assembly
 0000000000001189 <main>:
@@ -319,7 +321,7 @@ We now see that our symbol table has grown quite a bit, and symbols like `cout` 
 
 Inside of our main function, we see that our placeholder addresses for our string and `cout` have been replaced by real values.
 
-Note, the address `4040` in the comment at the end of the `lea` instruction for `std::cout` corresponds to the same address we dumped from the symbol table:
+The address `4040` in the comment at the end of the `lea` instruction for `std::cout` corresponds to the same address we dumped from the symbol table:
 
 ```text
 0000000000004040 B std::cout@@GLIBCXX_3.4
@@ -335,18 +337,79 @@ Contents of section .rodata:
  2010 64210a00                             d!..            
 ```
 
-Note, the address at `2005` in the comment at the end of the `lea` instruction for our string corresponds to the start of our string in the `.rodata` section (`2000 + 5`).
-
-The `2005` also matches calculation from the comment, where `std::piecewise_construct` is located at `2004`:
+Note, the address `2005` in the comment at the end of the `lea` instruction for our string corresponds to the start of our string in the `.rodata` section (`2000 + 5`). This address is calculated in the comment with `<std::piecewise_construct+0x1>`, where `std::piecewise_construct` is located at `2004`, as seen in the symbol table:
 
 ```
 text
 0000000000002004 r std::piecewise_construct
 ```
 
-And has `0x1` added to it to get to the start of the string `# 2005 <std::piecewise_construct+0x1>`.
+## Additional Notes
+
+### Generating Intermediate Files
+
+If you want `g++` to save the result from all the intermediate steps of compilation, you can pass it the `-save-temps` flag:
+
+```bash
+g++ hello_world.cpp -o hello_world -save-temps
+```
+
+This will generate the preprocessed output `hello_world.ii`, compiled code `hello_world.s`, object code `hello_world.o`, and executable `hello_world`.
+
+### Verbose Output from g++
+
+You can also get the commands that the compiler drive `g++` used to compile your application by specifying the `-v` option. Here's the output from my machine running `g++ hello_world.cpp -o hello_world -v`:
+
+```bash
+Using built-in specs.
+COLLECT_GCC=g++
+COLLECT_LTO_WRAPPER=/usr/local/libexec/gcc/x86_64-pc-linux-gnu/10.0.1/lto-wrapper
+Target: x86_64-pc-linux-gnu
+Configured with: ../configure --disable-multilib
+Thread model: posix
+Supported LTO compression algorithms: zlib
+gcc version 10.0.1 20200412 (experimental) (GCC) 
+COLLECT_GCC_OPTIONS='-o' 'hello_world' '-v' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+ /usr/local/libexec/gcc/x86_64-pc-linux-gnu/10.0.1/cc1plus -quiet -v -imultiarch x86_64-linux-gnu -D_GNU_SOURCE hello_world.cpp -quiet -dumpbase hello_world.cpp -mtune=generic -march=x86-64 -auxbase hello_world -version -o /tmp/cc9kgEvV.s
+GNU C++14 (GCC) version 10.0.1 20200412 (experimental) (x86_64-pc-linux-gnu)
+	compiled by GNU C version 10.0.1 20200412 (experimental), GMP version 6.1.0, MPFR version 3.1.4, MPC version 1.0.3, isl version isl-0.18-GMP
+
+GGC heuristics: --param ggc-min-expand=30 --param ggc-min-heapsize=4096
+ignoring nonexistent directory "/usr/local/include/x86_64-linux-gnu"
+ignoring nonexistent directory "/usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/../../../../x86_64-pc-linux-gnu/include"
+#include "..." search starts here:
+#include <...> search starts here:
+ /usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/../../../../include/c++/10.0.1
+ /usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/../../../../include/c++/10.0.1/x86_64-pc-linux-gnu
+ /usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/../../../../include/c++/10.0.1/backward
+ /usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/include
+ /usr/local/include
+ /usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/include-fixed
+ /usr/include/x86_64-linux-gnu
+ /usr/include
+End of search list.
+GNU C++14 (GCC) version 10.0.1 20200412 (experimental) (x86_64-pc-linux-gnu)
+	compiled by GNU C version 10.0.1 20200412 (experimental), GMP version 6.1.0, MPFR version 3.1.4, MPC version 1.0.3, isl version isl-0.18-GMP
+
+GGC heuristics: --param ggc-min-expand=30 --param ggc-min-heapsize=4096
+Compiler executable checksum: 46de3d8a6d088bac0288614969e77d24
+COLLECT_GCC_OPTIONS='-o' 'hello_world' '-v' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+ as -v --64 -o /tmp/ccnpWHbO.o /tmp/cc9kgEvV.s
+GNU assembler version 2.30 (x86_64-linux-gnu) using BFD version (GNU Binutils for Ubuntu) 2.30
+COMPILER_PATH=/usr/local/libexec/gcc/x86_64-pc-linux-gnu/10.0.1/:/usr/local/libexec/gcc/x86_64-pc-linux-gnu/10.0.1/:/usr/local/libexec/gcc/x86_64-pc-linux-gnu/:/usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/:/usr/local/lib/gcc/x86_64-pc-linux-gnu/
+LIBRARY_PATH=/usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/:/usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/../../../../lib64/:/lib/x86_64-linux-gnu/:/lib/../lib64/:/usr/lib/x86_64-linux-gnu/:/usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/../../../:/lib/:/usr/lib/
+COLLECT_GCC_OPTIONS='-o' 'hello_world' '-v' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+ /usr/local/libexec/gcc/x86_64-pc-linux-gnu/10.0.1/collect2 -plugin /usr/local/libexec/gcc/x86_64-pc-linux-gnu/10.0.1/liblto_plugin.so -plugin-opt=/usr/local/libexec/gcc/x86_64-pc-linux-gnu/10.0.1/lto-wrapper -plugin-opt=-fresolution=/tmp/ccLOxCSG.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o hello_world /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o /usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/crtbegin.o -L/usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1 -L/usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/../../../../lib64 -L/lib/x86_64-linux-gnu -L/lib/../lib64 -L/usr/lib/x86_64-linux-gnu -L/usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/../../.. /tmp/ccnpWHbO.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/local/lib/gcc/x86_64-pc-linux-gnu/10.0.1/crtend.o /usr/lib/x86_64-linux-gnu/crtn.o
+COLLECT_GCC_OPTIONS='-o' 'hello_world' '-v' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+```
+
+### Shared Libraries
+
+One details we did not cover in detail in this example is shared libraries. Check out [this](https://amir.rachum.com/blog/2016/09/17/shared-libraries/) blog post on shared libraries and dynamic loading for more details.
 
 ## Final Thoughts
+
+Understanding the individual components of compilation can be useful when debugging complex compilation errors and trying to speed up the build time of large applications. It's also a great place to start if you want to start working on compilers yourself.
 
 Thanks for reading,
 
