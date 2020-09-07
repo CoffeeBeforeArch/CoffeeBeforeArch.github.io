@@ -228,7 +228,7 @@ Disassembly of section .text:
 
 We now have our instructions and their hex encoding side-by-side. One important thing to note is that many of our addresses, including those for our `"Hello, world!\n"` string and `cout` have been replaced by placeholders. To understand why, we need to briefly talk about the symbol table.
 
-The symbol table is a map between names (like `cout`) and information related to those names. If we dump the symbol table for our object code using `nm -C hello_world.o`, we get the following output (note, `-C` gets rid of the C++ name mangling):
+The symbol table is a map between names (like `cout`) and information related to those names that is used by the linker. If we dump the symbol table for our object code using `nm -C hello_world.o`, we get the following output (note, `-C` gets rid of the C++ name mangling):
 
 ```text
                  U __cxa_atexit
