@@ -405,7 +405,7 @@ COLLECT_GCC_OPTIONS='-o' 'hello_world' '-v' '-shared-libgcc' '-mtune=generic' '-
 
 ### Shared Libraries
 
-One details we did not cover in detail in this example is shared libraries. Check out [this](https://amir.rachum.com/blog/2016/09/17/shared-libraries/) blog post on shared libraries and dynamic loading for more details.
+One detail we did not cover in this example is shared libraries. Check out [this](https://amir.rachum.com/blog/2016/09/17/shared-libraries/) blog post on shared libraries and dynamic loading for more details.
 
 ## Final Thoughts
 
