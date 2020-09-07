@@ -251,7 +251,7 @@ For each symbol, we get an address, and the symbol type. Many of our symbols are
 
 The final step of generating an executable is linking. This is where our object files get linked together, and our placeholder addresses get replaced with their final values. The linker for GCC is `ld`. However, GCC will use the `collect2` utility which is a wrapper around `ld`.
 
-We will finish linking our program with `g++`. By default, `g++` will link against things like the C++ standard library implementation, `libstdc++.so`. Here is the final command we'll use:
+We will finish linking our program using `g++`. By default, `g++` will link against things like the C++ standard library implementation, `libstdc++.so`. Here is the final command we'll use:
 
 ```bash
 g++ hello_world.o -o hello_world
