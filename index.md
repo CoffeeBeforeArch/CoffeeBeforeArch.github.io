@@ -33,7 +33,7 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Compiler Optimizations of a Clamp Function]({% post_url 2020-08-12-clamp-optimization %})
 
-- [Compiler Optimizations of a Clamp Function]({% post_url 2020-09-06-compilation %})
+- [Compilation Basics]({% post_url 2020-09-06-compilation %})
 
 ## GPGPU-Sim Tutorials
 
