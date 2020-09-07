@@ -84,7 +84,7 @@ int main() {
 
 The only major difference is that our comments have been stripped out.
 
-The remaining ~30,000 lines are what replaced the `#include <iostream>` directive in our original program. Withiin these lines, we can find reference to `std::cout`:
+The remaining ~30,000 lines are what replaced the `#include <iostream>` directive in our original program. Within these lines, we can find reference to `std::cout`:
 
 ```cpp
 namespace std __attribute__ ((__visibility__ ("default")))
@@ -178,7 +178,7 @@ The final thing our program does is our `return 0;` statement. It does this by s
 	ret
 ```
 
-Note `popq` is just part of managing the stack stack.
+Note `popq` is just part of managing the stack.
 
 ## Assembly
 
@@ -249,9 +249,9 @@ For each symbol, we get an address, and the symbol type. Many of our symbols are
 
 ## Linking
 
-The final step of generating an executable is linking. This is where our object files get linked together, and all our addresses get finalized. The linker for GCC is `ld`. However, GCC will use the `collect2` utility under the hood, which is a wrapper around `ld`.
+The final step of generating an executable is linking. This is where our object files get linked together, and our placeholder addresses get replaced with their final values. The linker for GCC is `ld`. However, GCC will use the `collect2` utility which is a wrapper around `ld`.
 
-We can finish linking our program with `g++`. By default, `g++` will automatically link against things like the standard library implementation for GCC, `libstdc++.so`. Here's the final command we'll use:
+We will finish linking our program with `g++`. By default, `g++` will link against things like the C++ standard library implementation, `libstdc++.so`. Here is the final command we'll use:
 
 ```bash
 g++ hello_world.o -o hello_world
@@ -319,7 +319,7 @@ We now see that our symbol table has grown quite a bit, and symbols like `cout` 
 
 ```
 
-Inside of our main function, we see that our placeholder addresses for our string and `cout` have been replaced by real values.
+Inside our `main` function, we see that our placeholder addresses for our string and `cout` have been replaced by real values.
 
 The address `4040` in the comment at the end of the `lea` instruction for `std::cout` corresponds to the same address we dumped from the symbol table:
 
@@ -327,7 +327,7 @@ The address `4040` in the comment at the end of the `lea` instruction for `std::
 0000000000004040 B std::cout@@GLIBCXX_3.4
 ```
 
-We also can dump the `.rodata` section from the executable:
+We also can dump the `.rodata` section from the executable as we did with our object code:
 
 ```text
 hello_world:     file format elf64-x86-64
