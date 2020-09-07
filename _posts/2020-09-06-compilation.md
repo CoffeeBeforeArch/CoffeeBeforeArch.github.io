@@ -182,7 +182,7 @@ Note `popq` is just part of managing the stack.
 
 ## Assembly
 
-Our instructions must be translated into machine code by an assembler before our processor can read them. The assembler for GCC is `as` (The GNU Assembler).
+Our instructions must be translated into machine code by an assembler before our processor can understand them. The assembler for GCC is `as` (The GNU Assembler).
 
 We can run the GNU Assembler directly by invoking `as`:
 
