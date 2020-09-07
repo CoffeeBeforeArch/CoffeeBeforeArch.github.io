@@ -215,12 +215,110 @@ Disassembly of section .text:
   21:	c3                   	retq   
 ```
 
-We can now see our instructions with their hex encoding side-by-side. One other thing to note is that many of our addresses, including those for our `"Hello, world!\n"` string and `cout` have been replaced by placeholders.
+We can now see our instructions with their hex encoding side-by-side. One other thing to note is that many of our addresses, including those for our `"Hello, world!\n"` string and `cout` have been replaced by placeholders. This leads us to the symbol table.
+
+The symbol table is a map between a name (like `cout`) and infromation related to that name. If we dump the symbol table for our object code (using `nm -C hello_world.o`), we get the following:
+
+```text
+                 U __cxa_atexit
+                 U __dso_handle
+                 U _GLOBAL_OFFSET_TABLE_
+000000000000006f t _GLOBAL__sub_I_main
+0000000000000000 T main
+0000000000000022 t __static_initialization_and_destruction_0(int, int)
+                 U std::ios_base::Init::Init()
+                 U std::ios_base::Init::~Init()
+                 U std::cout
+0000000000000000 r std::piecewise_construct
+0000000000000000 b std::__ioinit
+                 U std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*)
+```
+
+For each symbol, we get an address, and the symbol type. Many of our symbols are of the `U` type. These means the symbols are undefined, and will need to be resolved in the next phase (linking). Other sybols are of the `T` or `t` type, meaning they live in the text (code) section of the object file. Type `r` symbols were found in the read-only data section, and `b` symbols are in the BSS data section (zero/uninitialized data).
 
 ## Linking
 
-## Final Thoughts
+The final step of generating an executable is linking. This is where our object files get linked together, and all our addresses get finalized. The linker for GCC is `ld`. However, GCC will use the `collect2` utility, which is a wrapper over `ld`.
 
+We can finish linking our program with GCC.
+
+```bash
+g++ hello_world.o -o hello_world
+```
+
+This will give use a fully formed executable! Let's dump the symbol table to see how things have changed after linking:
+
+```text
+0000000000004010 B __bss_start
+0000000000004150 b completed.0
+                 U __cxa_atexit@@GLIBC_2.2.5
+                 w __cxa_finalize@@GLIBC_2.2.5
+0000000000004000 D __data_start
+0000000000004000 W data_start
+00000000000010d0 t deregister_tm_clones
+0000000000001140 t __do_global_dtors_aux
+0000000000003d98 d __do_global_dtors_aux_fini_array_entry
+0000000000004008 D __dso_handle
+0000000000003da0 d _DYNAMIC
+0000000000004010 D _edata
+0000000000004158 B _end
+0000000000001298 T _fini
+0000000000001180 t frame_dummy
+0000000000003d88 d __frame_dummy_init_array_entry
+00000000000021ac r __FRAME_END__
+0000000000003fa0 d _GLOBAL_OFFSET_TABLE_
+00000000000011f8 t _GLOBAL__sub_I_main
+                 w __gmon_start__
+0000000000002014 r __GNU_EH_FRAME_HDR
+0000000000001000 t _init
+0000000000003d98 d __init_array_end
+0000000000003d88 d __init_array_start
+0000000000002000 R _IO_stdin_used
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+0000000000001290 T __libc_csu_fini
+0000000000001220 T __libc_csu_init
+                 U __libc_start_main@@GLIBC_2.2.5
+0000000000001189 T main
+0000000000001100 t register_tm_clones
+00000000000010a0 T _start
+0000000000004010 D __TMC_END__
+00000000000011ab t __static_initialization_and_destruction_0(int, int)
+                 U std::ios_base::Init::Init()@@GLIBCXX_3.4
+                 U std::ios_base::Init::~Init()@@GLIBCXX_3.4
+0000000000004040 B std::cout@@GLIBCXX_3.4
+0000000000002004 r std::piecewise_construct
+0000000000004151 b std::__ioinit
+                 U std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*)@@GLIBCXX_3.4
+```
+
+We now see that our sybol table has grown, and our symbols like `cout` now have a final address. Let's use `objdump` to see how our assembly has changed:
+
+```assembly
+0000000000001189 <main>:
+    1189:	f3 0f 1e fa          	endbr64 
+    118d:	55                   	push   %rbp
+    118e:	48 89 e5             	mov    %rsp,%rbp
+    1191:	48 8d 35 6d 0e 00 00 	lea    0xe6d(%rip),%rsi        # 2005 <std::piecewise_construct+0x1>
+    1198:	48 8d 3d a1 2e 00 00 	lea    0x2ea1(%rip),%rdi        # 4040 <std::cout@@GLIBCXX_3.4>
+    119f:	e8 dc fe ff ff       	callq  1080 <std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*)@plt>
+    11a4:	b8 00 00 00 00       	mov    $0x0,%eax
+    11a9:	5d                   	pop    %rbp
+    11aa:	c3                   	retq   
+
+```
+
+Inside of our main function, we see that our placeholder addresses for our `string` and `cout` have been replaced by real values. We also can dump the `.rodata` section from the executable:
+
+```text
+hello_world:     file format elf64-x86-64
+
+Contents of section .rodata:
+ 2000 01000200 0048656c 6c6f2c20 776f726c  .....Hello, worl
+ 2010 64210a00                             d!..            
+```
+
+## Final Thoughts
 
 Thanks for reading,
 
