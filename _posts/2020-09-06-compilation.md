@@ -358,7 +358,7 @@ This will generate the preprocessed output `hello_world.ii`, compiled code `hell
 
 ### Verbose Output from g++
 
-You can also get the commands that the compiler drive `g++` used to compile your application by specifying the `-v` option. Here's the output from my machine running `g++ hello_world.cpp -o hello_world -v`:
+You can also get the commands that the compiler driver `g++` used to compile your application by specifying the `-v` option. Here's the output from my machine running `g++ hello_world.cpp -o hello_world -v`:
 
 ```bash
 Using built-in specs.
