@@ -9,6 +9,14 @@ When a branch is biased (e.g., mostly taken or mostly not-taken), we can inform 
 
 In this blog post, we will look at how performance can vary depending on how a branch is biased, then explore what benefits we can get from compiler hints. We will then compare the results to branchless versions of our benchmarks, and analyze the tradoffs between the implementations.
 
+### Link to the source code
+
+- [Source Code: ](https://github.com/CoffeeBeforeArch/misc_code/tree/master/biased_branches)
+- [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
+- [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
+- My Email: CoffeeBeforeArch@gmail.com
+
+
 # Conditional Add
 
 ## Baseline
@@ -165,17 +173,6 @@ In this first section of the assembly, we have our main loop which tests the con
 ```
 
 Code that is unlikely to be executed is often moved away from the hot path to avoid pollution of the instruction cache and decoded stream buffer which caches decoded micro-ops.
-
-## Conditional Modulo
-
-Let's look at a slightly different benchmark that 
-
-### Link to the source code
-
-- [Source Code: ](https://github.com/CoffeeBeforeArch/misc_code/tree/master/biased_branches)
-- [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
-- [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
-- My Email: CoffeeBeforeArch@gmail.com
 
 ## Final Thoughts
 
