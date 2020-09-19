@@ -63,7 +63,27 @@ branchBenchRandom/14/80       45.5 us         45.5 us        30706
 branchBenchRandom/14/90       32.0 us         32.0 us        44435
 ```
 
-The first thing we see is that performance is best near the tails (`0.1` and `0.9`). This is where almost all the branches are not taken, or they are almost all taken. Modern branch predictors to a good job with heavily skewed branches like this, so we should see a very small miss-prediction rate in our performance counters.
+And now let's take a look at where we're spending our time in the assembly:
+
+```assembly
+  5.50 │1d0:┌─→shlx   %rax,%rdi,%rdx          
+  4.75 │    │  and    (%rcx),%rdx                                 
+  7.91 │    │↓ je     1ef                                       
+ 28.34 │    │  mov    0x20(%rbp),%rdx                             
+  3.55 │    │  cmp    %rdx,0x28(%rbp)                             
+  0.00 │    │↓ je     373                                          
+  6.89 │    │  mov    (%rdx),%rdx                                 
+ 15.79 │    │  add    %edx,(%r12)                                  
+ 21.03 │1ef:│  cmp    $0x3f,%eax                                      
+  0.38 │    │↓ je     260      
+  0.34 │    │  inc    %eax     
+       │    ├──cmp    %rcx,%rsi
+  4.36 │    └──jne    1d0
+```
+
+The first thing our code does is extract our condition from the `std::vector<bool>` which is implemented as a bit-vector. This is done with a shift (`shlx`) and logical AND (`and`) instruction. The following `je` instruction based on the logical AND is used to skip the `add` instruction. The remaining code is used loop bounds checking, and loading in another 64 condition results from the bit vector (`cmp    $0x3f,%eax`).
+
+From the performance results, we see that our time is best near the tails (`0.1` and `0.9`). This is where almost all the branches are not taken, or they are almost all taken. Modern branch predictors to a good job with heavily skewed branches like this, so we should see a very small miss-prediction rate in our performance counters.
 
 Here is the miss-prediction rate for `branchBenchRandom/14/10`:
 
@@ -172,7 +192,12 @@ In this first section of the assembly, we have our main loop which tests the con
   0.01 │     ↑ jmpq   1de
 ```
 
-Code that is unlikely to be executed is often moved away from the hot path to avoid pollution of the instruction cache and decoded stream buffer which caches decoded micro-ops.
+Code that is unlikely to be executed is often moved away from the hot path to avoid pollution of the instruction cache and decoded stream buffer which caches decoded micro-ops. You will also typically see the prioritized side of the branch moved to the not-taken side of the branch. We can find the following excerpt from the Intel Software Optimization Manual:
+
+- "Even though this BPU mechanism generally eliminates the penalty for taken branches, software
+should still regard taken branches as consuming more resources than do not-taken branches."
+
+If we look at the [Instruction Table book](https://www.agner.org/optimize/instruction_tables.pdf) from Agner Fog, we can see that predicted taken branches can be scheduled to two ports (0 and 6), and predicted taken branches can only be scheduled to one port (6).
 
 ## Final Thoughts
 
