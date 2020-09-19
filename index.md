@@ -35,6 +35,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Compilation Basics]({% post_url 2020-09-06-compilation %})
 
+- [Biased Branches]({% post_url 2020-09-16-biased-branches %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
