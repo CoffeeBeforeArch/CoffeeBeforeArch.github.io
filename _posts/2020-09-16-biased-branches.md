@@ -21,7 +21,7 @@ In this blog post, we will look at how performance can vary depending on how a b
 
 ## Baseline
 
-The thing we will benchmark is a simple for-loop that conditionally adds a constant value to a total using based on outcomes stored in a `std::vector<bool>`:
+The benchmark we'll look at in this post is a simple for-loop that conditionally adds a constant value to a total based on outcomes stored in a `std::vector<bool>`:
 
 ```cpp
 for (auto b : v_in)
@@ -81,7 +81,7 @@ And now let's take a look at where we're spending our time in the assembly:
   4.36 │    └──jne    1d0
 ```
 
-The first thing our code does is extract our condition from the `std::vector<bool>` which is implemented as a bit-vector. This is done with a shift (`shlx`) and logical AND (`and`) instruction. The following `je` instruction based on the logical AND is used to skip the `add` instruction. The remaining code is used loop bounds checking, and loading in another 64 condition results from the bit vector (`cmp    $0x3f,%eax`).
+The first thing our code does is extract our condition from the `std::vector<bool>` which is implemented as a bit-vector. This is done with a shift (`shlx`) and logical AND (`and`) instruction. The following `je` instruction based on the logical AND is used to skip the `add` instruction. The remaining code is used loop bounds checking, and loading in another 64 condition results from the bit vector (e.g., `cmp    $0x3f,%eax`).
 
 From the performance results, we see that our time is best near the tails (`0.1` and `0.9`). This is where almost all the branches are not taken, or they are almost all taken. Modern branch predictors to a good job with heavily skewed branches like this, so we should see a very small miss-prediction rate in our performance counters.
 
@@ -181,7 +181,7 @@ Let's take a look at the assembly to see how our code as changed:
   4.66 │    └──jne    1d0       
 ```
 
-In this first section of the assembly, we have our main loop which tests the condition, and skips the addition. However, the case we've marked as unlikely (performing the addition), as been moved far lower in the executable, starting at address `26e`:
+In this first section of the assembly, we have our main loop which tests the condition, and skips the addition. However, the case we've marked as unlikely (performing the addition), as been moved far lower in the executable, starting at address `26e` (I've omitted the unrelated code in-between):
 
 ```assembly
  23.71 │26e:   mov    0x20(%rbp),%rdx
@@ -200,6 +200,8 @@ should still regard taken branches as consuming more resources than do not-taken
 If we look at the [Instruction Table book](https://www.agner.org/optimize/instruction_tables.pdf) from Agner Fog, we can see that predicted taken branches can be scheduled to two ports (0 and 6), and predicted taken branches can only be scheduled to one port (6).
 
 ## Final Thoughts
+
+Compiler hints are tricky, and can introduce new performance problems when used incorrectly. However, when applied carefully, they can be impactful for performance, especially when applied to branches in a tight loop. You'll find that the Linux kernel applies these hints using the macros `likely` and `unlikely`.
 
 Thanks for reading,
 
