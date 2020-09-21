@@ -19,6 +19,14 @@ In this blog post, we will look at how performance can vary based on degree at w
 
 # Conditional Add
 
+The benchmark we'll be looking at was compiled with the following command, and with g++ version 10.0.1:
+
+```bash
+g++ random.cpp -O3 -lbenchmark -lpthread -march=native -mtune=native -flto -fuse-linker-plugin -o random --std=c++2a
+```
+
+The full benchmark code can be found [here](https://github.com/CoffeeBeforeArch/misc_code/blob/master/biased_branches/random.cpp)!
+
 ## Baseline
 
 The benchmark we'll look at in this post is a simple for-loop that conditionally adds a constant value to a total based on outcomes stored in a `std::vector<bool>`:
