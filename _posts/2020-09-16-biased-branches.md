@@ -217,7 +217,7 @@ branchBenchRandom/14/90                32.0 us         32.0 us        44435
 branchBenchRandom_unlikely/14/90       40.9 us         40.9 us        33721
 ```
 
-Our perf decreases by ~20%! But what about if we provide the opposite hint (`[[likely]]`)?. For this simple example, the baseline code is the same code generated with the `[[likely]]` hint (for this particular compiler version), so I've omitted the numbers for brevity. On other compiler versions, I've seen similar speedups as with the `[[unlikely]]` but on the skewed taken side. I encourage you to test this for yourself, and see what you find!
+Our perf decreases by ~20%! But what happens when provide a hint for the opposite outcome (`[[likely]]`)? For this simple example, the baseline code is the same code generated with the `[[likely]]` attribute, so I've omitted the numbers for brevity. With different versions of GCC, I've seen similar speedups as we had with the `[[unlikely]]` attribute but on the mostly-taken side. I encourage you to test this for yourself, and see what you find!
 
 ## Final Thoughts
 
