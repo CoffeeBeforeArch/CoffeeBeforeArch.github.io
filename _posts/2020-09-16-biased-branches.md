@@ -36,7 +36,7 @@ for (auto b : v_in)
   if (b) *sink += s.range(0);
 ```
 
-The 2^14 outcomes we'll be benchmarking in our `std::vector<bool>` were generated using the following random number generator:
+The 2^14 outcomes we'll be using as the input for our benchmark ( stored in a `std::vector<bool>`) were generated using the following random number generator:
 
 ```cpp
 // Get the distribution
