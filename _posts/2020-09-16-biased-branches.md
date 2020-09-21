@@ -7,7 +7,7 @@ title: Biased Branches
 
 When a branch is biased (e.g., mostly taken or mostly not-taken), we can inform the compiler about this things like GCC's `__builtin_expect`, or the more portable C++20 attribute `[[likely]]`/`[[unlikely]]`. While providing good hints and improve code scheduling and performance, providing bad hints can worsen performance.
 
-In this blog post, we will look at how performance can vary depending on how a branch is biased, then explore what benefits we can get from compiler hints. We will then compare the results to branchless versions of our benchmarks, and analyze the tradoffs between the implementations.
+In this blog post, we will look at how performance can vary based on degree at which a branch is biased. We'll then explore how compiler hints can improve code scheduling and performance.
 
 ### Link to the source code
 
@@ -44,9 +44,9 @@ std::vector<bool> v_in(N);
 std::generate(begin(v_in), end(v_in), [&]() { return d(gen); });
 ```
 
-Our outcomes are generated using `std::bernoulli_distribution` We can pass a decimal between `0.0` and `1.0` to our `std::bernoulli_distribution` to skew the likelihood of generating `true`/`false` outcomes. For example, an input of `0.5` means that `true` and `false` are equally likely (50%), while an input of `0.1` means that ~90% of the time we'll generate a `false` outcome.
+Here, we're using the `std::bernoulli_distribution` which generates `true` and `false` outcomes based on an input probability `p`. `p` can be a value between `0.0` and `1.0`, where the the probability of generating `true` is `p`, and the probability of generating `false` is `1 - p`. For example, an input of `0.5` means that `true` and `false` are equally likely (50%). An input of `0.1` means that ~90% (`1 - p` == `1 - 0.1` == `0.9`) of the time we'll generate a `false` outcome.
 
-Let's take a look at the performance where we vary the skew from `0.1` to `0.9`:
+Let's take a look at performance while we vary `p` from `0.1` to `0.9`:
 
 ```text
 ------------------------------------------------------------------
