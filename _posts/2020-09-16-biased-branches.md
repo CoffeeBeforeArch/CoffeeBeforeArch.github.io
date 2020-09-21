@@ -122,7 +122,7 @@ branchBenchRandom/14/40       78.2 us         78.2 us        17904
 branchBenchRandom/14/60       82.1 us         82.0 us        17242
 ```
 
-While both sides should have similar branch miss-prediction rates, the mostly not-taken side should be favorable for performance because it is doing less work (it skips the instructions for performing the add).
+While both sides should have similar branch miss-prediction rates, the mostly not-taken side should be favorable for performance because it is doing less work (it skips the instructions for performing the add and storing the result).
 
 ## Adding Compiler Hints
 
@@ -166,7 +166,7 @@ branchBenchRandom_unlikely/14/30       62.2 us         62.2 us        23361
 branchBenchRandom_unlikely/14/40       79.4 us         79.4 us        17961
 ```
 
-For our heavily skewed branch (`0.1`), we see that a relatively large improvement in performance (30.2us to 26.5us). As `p` gets closer to `0.5`, our performance is slightly worse with the hint (e.g., 78.2us to 79.4 us for `p = 0.4`).
+When the branch is heavily skewed not take (e.g., `p = 0.1`), we see that a relatively large improvement in performance (30.2us to 26.5us). As `p` gets closer to `0.5`, our performance gets slightly worse than the baseline (e.g., 78.2us to 79.4 us for `p = 0.4`).
 
 Let's take a look at the assembly to see what has changed:
 
@@ -209,11 +209,11 @@ branchBenchRandom/14/90                32.0 us         32.0 us        44435
 branchBenchRandom_unlikely/14/90       40.9 us         40.9 us        33721
 ```
 
-Our perf decreases by ~20%! But what about if we provide the opposite hint (`[[likely]]`)?. For this simple example, the baseline code is the same code with the `[[likely]]` hint, so I've omitted the numbers for brevity.
+Our perf decreases by ~20%! But what about if we provide the opposite hint (`[[likely]]`)?. For this simple example, the baseline code is the same code generated with the `[[likely]]` hint (for this particular compiler version), so I've omitted the numbers for brevity. On other compiler versions, I've seen similar speedups as with the `[[unlikely]]` but on the skewed taken side. I encourage you to test this for yourself, and see what you find!
 
 ## Final Thoughts
 
-Compiler hints are tricky, and can introduce new performance problems when used incorrectly. However, when applied carefully, they can be impactful for performance, especially when applied to branches in a tight loop, or those executed many times. You'll find that the Linux kernel applies these hints using the macros `likely` and `unlikely`.
+Compiler hints are tricky, and can introduce new performance problems when used incorrectly. However, when applied carefully, they can provide meaninful improvements for performance, especially when applied to branches in a tight loop, or those executed many times. You can even find these hints in the Linux kernel used through the macros `likely` and `unlikely`.
 
 Thanks for reading,
 
