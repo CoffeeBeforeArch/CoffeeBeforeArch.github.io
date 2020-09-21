@@ -81,9 +81,9 @@ And now let's take a look at where we're spending our time in the assembly:
   4.36 │    └──jne    1d0
 ```
 
-The first thing our code does is extract our condition from the `std::vector<bool>` which is implemented as a bit-vector. This is done with a shift (`shlx`) and logical AND (`and`) instruction. The following `je` instruction based on the logical AND is used to skip the `add` instruction. The remaining code is used loop bounds checking, and loading in another 64 condition results from the bit vector (e.g., `cmp    $0x3f,%eax`).
+The first thing our code does is extract our condition from the `std::vector<bool>` which is implemented as a bit-vector. This is done with a shift (`shlx`) and logical AND (`and`) instruction. The following `je` (jump if equal) instruction is based on the logical AND which conditionally skip the `add` instruction. The remaining code is used loop bounds checking, and loading in another 64 condition results from the bit vector (e.g., `cmp    $0x3f,%eax`).
 
-From the performance results, we see that our time is best near the tails (`0.1` and `0.9`). This is where almost all the branches are not taken, or they are almost all taken. Modern branch predictors to a good job with heavily skewed branches like this, so we should see a very small miss-prediction rate in our performance counters.
+From the performance results, we see that our time is best near the tails (`0.1` and `0.9`). This is where almost all the branches are not taken, or they are almost all taken. Modern branch predictors to a good job with heavily skewed branches, so we should see a very small miss-prediction rate from our performance counters.
 
 Here is the miss-prediction rate for `branchBenchRandom/14/10`:
 
@@ -166,9 +166,9 @@ branchBenchRandom_unlikely/14/30       62.2 us         62.2 us        23361
 branchBenchRandom_unlikely/14/40       79.4 us         79.4 us        17961
 ```
 
-For our heavily skewed branch (`0.1`), we see that a relatively large improvement in performance (30.2us to 26.5us). When there is very little skew (`0.4`), or performance is slightly worse with the hint (78.2us to 79.4 us).
+For our heavily skewed branch (`0.1`), we see that a relatively large improvement in performance (30.2us to 26.5us). As `p` gets closer to `0.5`, our performance is slightly worse with the hint (e.g., 78.2us to 79.4 us for `p = 0.4`).
 
-Let's take a look at the assembly to see how our code as changed:
+Let's take a look at the assembly to see what has changed:
 
 ```assembly
   3.41 │1d0:┌─→shlx   %rax,%rdi,%rdx
@@ -192,16 +192,28 @@ In this first section of the assembly, we have our main loop which tests the con
   0.01 │     ↑ jmpq   1de
 ```
 
-Code that is unlikely to be executed is often moved away from the hot path to avoid pollution of the instruction cache and decoded stream buffer which caches decoded micro-ops. You will also typically see the prioritized side of the branch moved to the not-taken side of the branch. We can find the following excerpt from the Intel Software Optimization Manual:
+Code that is unlikely to be executed is often moved away from the hot path to avoid pollution of the instruction cache and decoded stream buffer which caches decoded micro-ops. You will also typically see the prioritized side of the branch moved to the not-taken side of the branch. We can find the following excerpt from the Intel Software Optimization Manual about predicted branches by the branch predictor unit (BPU):
 
-- "Even though this BPU mechanism generally eliminates the penalty for taken branches, software
-should still regard taken branches as consuming more resources than do not-taken branches."
+- _"Even though this BPU mechanism generally eliminates the penalty for taken branches, software
+should still regard taken branches as consuming more resources than do not-taken branches."_
 
-If we look at the [Instruction Table book](https://www.agner.org/optimize/instruction_tables.pdf) from Agner Fog, we can see that predicted taken branches can be scheduled to two ports (0 and 6), and predicted taken branches can only be scheduled to one port (6).
+If we look at the [Instruction Table book](https://www.agner.org/optimize/instruction_tables.pdf) from Agner Fog, we can also see that predicted taken branches can be scheduled to two ports (0 and 6), and predicted taken branches can only be scheduled to one port (6).
+
+What about when the hint is bad? Our performance gets worse (all the code scheduling optimizations performed by the compiler based on our hint works against us)! Here are the performance numbers for the heavily skewed taken benchmark (`p = 0.9`) side-by-side:
+
+```text
+---------------------------------------------------------------------------
+Benchmark                                 Time             CPU   Iterations
+---------------------------------------------------------------------------
+branchBenchRandom/14/90                32.0 us         32.0 us        44435
+branchBenchRandom_unlikely/14/90       40.9 us         40.9 us        33721
+```
+
+Our perf decreases by ~20%! But what about if we provide the opposite hint (`[[likely]]`)?. For this simple example, the baseline code is the same code with the `[[likely]]` hint, so I've omitted the numbers for brevity.
 
 ## Final Thoughts
 
-Compiler hints are tricky, and can introduce new performance problems when used incorrectly. However, when applied carefully, they can be impactful for performance, especially when applied to branches in a tight loop. You'll find that the Linux kernel applies these hints using the macros `likely` and `unlikely`.
+Compiler hints are tricky, and can introduce new performance problems when used incorrectly. However, when applied carefully, they can be impactful for performance, especially when applied to branches in a tight loop, or those executed many times. You'll find that the Linux kernel applies these hints using the macros `likely` and `unlikely`.
 
 Thanks for reading,
 
