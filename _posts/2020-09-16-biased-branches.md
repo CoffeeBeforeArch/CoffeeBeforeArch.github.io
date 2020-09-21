@@ -5,7 +5,7 @@ title: Biased Branches
 
 # Biased Branches
 
-When a branch is biased (e.g., mostly taken or mostly not-taken), we can inform the compiler about this things like GCC's `__builtin_expect`, or the more portable C++20 attribute `[[likely]]`/`[[unlikely]]`. While providing good hints and improve code scheduling and performance, providing bad hints can worsen performance.
+When a branch is biased (e.g., mostly taken or mostly not-taken), we can inform the compiler about this using things like GCC's `__builtin_expect`, or the more portable C++20 attribute `[[likely]]`/`[[unlikely]]`. While providing good hints can improve code scheduling and performance, providing bad hints can worsen performance.
 
 In this blog post, we will look at how performance can vary based on degree at which a branch is biased. We'll then explore how compiler hints can improve code scheduling and performance.
 
