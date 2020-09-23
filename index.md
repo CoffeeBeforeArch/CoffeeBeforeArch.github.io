@@ -1,6 +1,11 @@
 ## CoffeeBeforeArch - The Github Page
 
-Hey everyone I'm Nick, and welcome to the CoffeeBeforeArch GitHub page! I'm creating 100% open teaching content on a variety of topics, including introductory C++ programming, performance optimization and benchmarking, and GPU architecture.
+Hey everyone I'm Nick, and welcome to the CoffeeBeforeArch GitHub page! I'm creating 100% open teaching content on a variety of topics, including:
+
+- C++ programming
+- Performance optimization and benchmarking
+- CPU and GPU architecture
+- Compilers
 
 The content I create reflects how I would have wanted to learn about programming, optimization, and architecture. Hopefully it helps others that are teaching themselves about computer science like I did.
 
@@ -48,6 +53,7 @@ The content I create reflects how I would have wanted to learn about programming
 A few people have been curious about my software/hardware setup. I've therefore provided a list of these things below, with a brief rational behind the choices.
 
 ### Software
+
 #### Operating System - Ubuntu 18.04
 If you're looking to try a GNU-Linux operating system, Ubuntu is a great place to start. It was the first distribution that I used, and supports all the software I need. There are more do-it-yourself distrubutions (like Arch), but I've never needed that level of customization.
 
