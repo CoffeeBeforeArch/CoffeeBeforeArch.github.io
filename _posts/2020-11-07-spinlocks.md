@@ -107,7 +107,53 @@ If the spinlock was already locked by another thread (`locked == true`), the ato
 
 ### The Unlock Method
 
-The `unlock` method for our thread is incredibly simple. When the thread holding the lock wants to release the lock, it simply sets `locked` to `false`. That allows the next thread that is executing the atomic exchange in the lock method to grab the lock.
+The `unlock` method for our thread is incredibly simple. When the thread holding the lock wants to release the lock, it simply sets `locked` to `false`. The next atomic exchange from a waiting thread in the `lock` method will then grab the lock.
+
+### Low Level Assembly
+
+Let's take a look at the low level assembly for our benchmark to see what is being executed by the processor:
+
+```assembly
+  0.33 │20:┌─→mov     %edi,%ecx     
+ 77.99 │   │  xchg    %cl,(%rdx)    
+  0.03 │   │  test    %cl,%cl       
+  0.18 │   │↑ jne     20            
+  8.43 │   │  incq    (%rsi)        
+ 13.05 │   │  xchg    %cl,(%rdx)    
+       │   ├──dec     %eax          
+  0.00 │   └──jne     20            
+```
+
+The first thing we see is our loop with an atomic exchange (`xchg`). This is our `lock` method where we spin in a `while` loop until our atomic exchange returns false.
+
+The next thing we have is an increment instruction (`incq`). This is the increment of our shared variable in the `inc` fucntion our threads are running.
+
+Finally, we have another atomic exchange `xchg` to release the lock, before decrementing the loop counter for our `for` loop, and repeating the process if the 100k iterations are not done.
+
+### Performance
+
+Here are the end-to-end performance numbers for 1, 2, 4, and 8 threads:
+
+```txt
+------------------------------------------------------------
+Benchmark                  Time             CPU   Iterations
+------------------------------------------------------------
+naive/1/real_time       1.05 ms        0.054 ms          686
+naive/2/real_time       14.2 ms        0.090 ms           47
+naive/4/real_time       66.8 ms        0.129 ms           10
+naive/8/real_time        247 ms        0.255 ms            3
+```
+
+We might have initially assumed that doubling the number of threads would double the execution time. This is because the amount of work (number of total increments of our shared value) doubles as we double the number of running threads. However, this is not what we see from our timing results. Instead of our 2-thread benchmark taking 2x as long as the single-threaded, it takes 14x longer. You can observe a similar trend between the other benchmark cases as well.
+
+We must have some inter-thread contention that is causing our execution time to expload. Because our benchmark is simply doing a few loads and stores to memory, a good place to start would be looking at our caches. Here is our L1 cache miss-rate for the 8 thread benchmark:
+
+```txt
+104,434,391      L1-dcache-loads           #   10.438 M/sec                  
+ 48,181,819      L1-dcache-load-misses     #   46.14% of all L1-dcache hits  
+```
+
+It seems like our current spinlock implementation is causing a huge number of L1 cache misses. This is something we'll tackle with our first optimization called locally spinning.
 
 ## A Spinlock with Locally Spinning
 
