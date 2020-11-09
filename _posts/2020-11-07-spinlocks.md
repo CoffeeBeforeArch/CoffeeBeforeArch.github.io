@@ -69,6 +69,46 @@ For 100k iterations, our threads try and lock our spinlock, increment a shared v
 
 ## A Naive Spinlock
 
+Fundamentally, a spinlock requires three elements for functionality:
+
+1. State to maintain whether or not the spinlock is currently locked
+2. A method for locking the spinlock
+3. A method for unlocking the spinlock
+
+Here is a naive way you could implement a spinlock as a class in C++:
+
+```cpp
+ class Spinlock {
+  private:
+   // Spinlock state
+   std::atomic<bool> locked{false};
+ 
+  public:
+   // Lock the spinlock
+   void lock() {
+     while (locked.exchange(true))
+       ;
+   }
+   
+   // Unlock the spinlock
+   void unlock() { locked.store(false); }
+ };
+```
+
+### Spinlock State
+
+For our spinlock state (`locked`) we're using a `std::atomic<bool>`. This has been made atomic because multiple threads will be competing to modify the spinlock state (lock the spinlock) at the same time.
+
+### The Lock Method
+
+Our `lock` method is simple `while` loop where we repeatedly do an atomic exchange of `true` with the current state of the lock (`locked`). If the lock is free (`locked == false`), the atomic exchange will set `locked` to `true`, and return `false`. This will make the thread break out of the `while` loop, and return from the `lock` method.
+
+If the spinlock was already locked by another thread (`locked == true`), the atomic exchange will repeatedly swap out `true` (the state of the `locked`) with `true` (the value passed the `.exchange()`) method. This means the thread waiting will get stuck in the `while` loop until the lock is eventually freed (by another thread), and the waiting thread does an exchange that returns `false`.
+
+### The Unlock Method
+
+The `unlock` method for our thread is incredibly simple. When the thread holding the lock wants to release the lock, it simply sets `locked` to `false`. That allows the next thread that is executing the atomic exchange in the lock method to grab the lock.
+
 ## A Spinlock with Locally Spinning
 
 ## A Spinlock with Active Backoff
