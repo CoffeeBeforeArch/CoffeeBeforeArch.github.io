@@ -195,7 +195,7 @@ We're repeatedly accessing the same two pieces of memory (the state of the spinl
 
 Capacity misses occur when the amount of data we're accessing is simply too large to fit into our cache. For example, if we're iterating over 1GB of data, that won't completely fit into a 32kB L1 cache.
 
-Is the large percentage of L1 cache loads being misses a result of cold-start misses? 
+Is the large percentage of L1 cache loads being misses a result of capacity misses? 
 
 Unlikely. Let's think about the size of the data we're accessing. We're still only accessing two pieces of data we're accessing (our lock state, and shared value `val`). Our lock state is a `std::atomic<bool>` with conservatively only takes up 1 bytes. Our value, `val`, is a `std::uint64_t`, which is 8 bytes. That means together we're only using 9 bytes of data.
 
@@ -203,7 +203,150 @@ Unlikely. Let's think about the size of the data we're accessing. We're still on
 
 #### Conflict Misses
 
+Conflict misses occur when we access cache lines that all map to the same set (or subset of total sets) in our set-associative caches. For example, modern L1 caches usually have 8-way associativity. This means that each set has 8 slots for cache lines mapped to that set. If we access 8 cache lines that map to the same set, they can all be stored in our cache. However, if we access a 9th cache line, this will cause one of our cache lines in that set to be evicted, which can
+lead to later cache misses.
+
+Is the large percentage of L1 cache loads being misses a result of conflict misses? 
+
+Unlikely, and for the same reason that our misses are not from capacity misses. We are simply not accessing enough data for conflict misses to be an issue. Realistically, the 9 bytes we are repeatedly accessing would at most be split across two different cache lines (one line for our spinlock state, and one line for our shared value `val`).
+
 #### Coherence Misses
+
+Coherence misses occur because of writes in multi-threaded applications. Before a thread can write to data on a cache line, it first must get that cache line in the modified (`M`) state. This state means that the thread has exclusive access to the cache line, and no other copies of the cache line exist in any other cache.
+
+In order to guarantee that there are no copies of the cache line in any other cache, invalidations are sent out to all other cores/caches. Coherence misses occur when a cache line in one core is invalidated by a thread doing a write on a different core.
+
+Is the large percentage of L1 cache loads being misses a result of coherence misses? 
+
+Yes! Our benchmark is running multiple threads, all of which are writing to the same two pieces of memory (the spinlock state and the shared value `val`). All of our threads are fighting over the same cache line(s) and sending invalidations to each other.
+
+One way we can prove this out is by eliminating all doubt that our misses are from the first 3-Cs of cache misses (cold-start, capacity, and conflict misses). These should exist even in the single-threaded benchmark. Here are the cache miss numbers when we only run a single thread:
+
+```
+254,289,668      L1-dcache-loads           #  321.707 M/sec                  
+  2,906,087      L1-dcache-load-misses     #    1.14% of all L1-dcache hits  
+```
+
+Only ~1%! Our cache misses only spike up to ~50% when we run our multi-threaded benchmarks (2, 4, or 8 threads)
+
+### Addressing Coherence Misses
+
+Now that we know that our cache misses are due to coherence (specifically writes), what do we do about it? Intuitively, we want to limit the number of writes we perform, thereby reducing our cache line invalidation. Let's look at the three main places where we are performing writes:
+
+1. The increment of our shared value `val`
+2. The `unlock` method of our spinlock
+3. The `lock` method of our spinlock
+
+We can narrow down _where_ we will try and optimize by reasoning about the potential opportunity at each location.
+
+#### The Increment
+
+Can we limit the number of writes to our shared value `val`?
+
+No, because that would not be addressing any of the issues with our spinlock. The increment of `val` is just the arbitrary piece of work we have given our threads to perform, and is completely independant from the implementation of our spinlock. We should instead be focusing on our spinlock implemntation, because this is what we have designed.
+
+#### The Unlock Method
+
+Can we limit the number of writes done by our `unlock` method?
+
+No, because the number of writes our `unlock` method does is at minimum. Let's take a look at how we implemented this method in our `naive` implementation:
+
+```cpp
+   // Unlock the spinlock
+   void unlock() { locked.store(false); }
+```
+
+Each call to `unlock` only performs a single store which is necessary to mark the lock as free. We'll have to look for opportunities elsewhere.
+
+#### The Lock Method
+
+Can we limit the number of writes done by our `lock` method?
+
+Yes! Let's re-examine our `lock` implementation from our `naive` spinlock:
+
+```cpp
+   // Lock the spinlock
+   void lock() {
+     while (locked.exchange(true))
+       ;
+   }
+```
+
+As long as a thread is waiting in the `while` loop for the spinlock to be free, it is writing to the spinlock state (with the atomic exchange). That means that our cache line with the lock state is being torn between the different cores on our chip as fast as different threads can issue atomic writes. But how do we address this? 
+
+We can start by rethinking _when_ we try and grab the lock. Our current `lock` method constantly tries and grabs the lock using atomic exchanges. This is usually a bad idea, because in many cases we will fail to get the lock (especially when as we increase the number of threads). What we can instead do is only issue exchange instructions (writes) when the read the lock state has become free. That leads us to our spinning locally optimization.
+
+### The Spinning Locally Optimization
+
+Let's take a look at our `lock` method with the spinning locally optimization:
+
+```cpp
+   // Lock the spinlock
+   void lock() {
+     // Keep trying until we get the lock
+     while (1) {
+       // Try and grab the lock
+       if (!locked.exchange(true)) return;
+ 
+       // Read the spinlock state
+       while (locked.load())
+         ;
+     }
+   }
+```
+
+When a thread tries to lock our spinlock it falls into an infinite `while` loop. Inside the that loop, the thread first tried and grab the lock using an atomic exchange. If it gets the lock, the thread returns from the `lock` method. Otherwise, it falls into the second `while` loop where the thread repeatedly reads the state of the spinlock until it becomes free. When the thread reads the lock has once again become free, it breaks out of the second `while` loop, and attempts to get the
+lock again.
+
+What we've done is replace our writes while the lock is take with reads. This is good because read-only copies of a cache line exist in the caches of multiple cores at the same time. This means that each of our waiting threads can read a local copy of the spinlock state from their own L1 caches until the thread with the lock writes that the lock is free. This will invalidate the all copies of the cache line, and the waiting threads will then read the update that the spinlock has become free.
+
+### Low Level Assembly
+
+Let's take a look at how our low-level assembly for our benchmark looks with this new optimization:
+
+```assembly
+  0.25 │20:┌─→mov     %edi,%ecx       
+ 36.12 │   │  xchg    %cl,(%rax)      
+  0.03 │   │  test    %cl,%cl         
+  0.06 │   │↓ je      40              
+  0.28 │   │  nop                     
+ 35.84 │30:│  movzbl  (%rax),%ecx     
+  0.10 │   │  test    %cl,%cl         
+  5.87 │   │↑ jne     30              
+  1.10 │   │↑ jmp     20              
+       │   │  nop                     
+  4.78 │40:│  incq    (%rsi)         
+ 15.57 │   │  xchg    %cl,(%rax)    
+  0.00 │   ├──dec     %edx           
+       │   └──jne     20             
+```
+
+The first thing our code does is try and grab the lock using an atomic exchange (`xchg`). If we get the lock, we jump down the increment of our shared value `val` (`incq`), decrement our loop counter, and jump back to the top of the loop if our loop is not done.
+
+Where things differ from our original assembly is when we fail to get the lock. Instead of immediately retrying the atomic exchange, we fall into a tight loop where we read the state of the spinlock (`movzbl`), test if the spinlock is now free, then either jump up to the atomic exchange if the lock is free, or re-read the spinlock state if the lock is still take.
+
+### Performance
+
+Here are the end-to-end performance numbers for 1, 2, 4, and 8 threads:
+
+```txt
+-------------------------------------------------------------------
+Benchmark                         Time             CPU   Iterations
+-------------------------------------------------------------------
+spin_locally/1/real_time       1.01 ms        0.046 ms          698
+spin_locally/2/real_time       10.4 ms        0.070 ms           68
+spin_locally/4/real_time       28.9 ms        0.123 ms           19
+spin_locally/8/real_time       91.4 ms        0.148 ms            8
+```
+
+A very large improvement over our `naive` spinlock! We've improved from 14.2ms to 10.4ms for 2 threads, 66.8ms to 28.9ms for 4 threads, and 247ms to 91.4ms for 8 threads. Let's take a look at our L1 cache miss-rate for the 8 thread case to see if we helped reduce the number of coherence cache misses:
+
+```txt
+1,496,253,736      L1-dcache-loads           #  253.267 M/sec                  
+   70,272,048      L1-dcache-load-misses     #    4.70% of all L1-dcache hits  
+```
+
+Down from ~50% to ~5%! A huge improvement. While this is a great improvement, we can still do better. While we removed the constant contention for the cache line, we have replaced it with bursty contention (when a thread releases the lock). We can look at relieving this with an optimization called backoff.
 
 ## A Spinlock with Active Backoff
 
