@@ -157,6 +157,54 @@ It seems like our current spinlock implementation is causing a huge number of L1
 
 ## A Spinlock with Locally Spinning
 
+To tackle our L1 cache misses observed in our naive implementation, we first have to understand where our cache misses are coming from. One way we can approach this problem is by categorizing our misses by why the miss occured. For this, we can use the 4-Cs of cache misses.
+
+### The 4-Cs of Cache Misses
+
+Cache misses are clasically categorized into 4 types:
+
+1. Cold-Start/Compulsory Misses
+2. Capacity Misses
+3. Conflict Misses
+4. Coherence Misses
+
+Let's reason about which category our misses fall into so that it can guide our plan for optimization.
+
+#### Cold-Start/Compulsory Misses
+
+Cold-start misses (sometimes called compulsory misses) occur when we access data that for the first time. With the exception of prefetching, data accessed for the first time will not be in our caches, and we will see cache misses.
+
+Is the large percentage of L1 cache loads being misses a result of cold-start misses? 
+
+Unlikely. Let's thing about the loop each thread in our benchmark is running:
+
+```cpp
+ // Increment val once each time the lock is acquired
+ void inc(Spinlock &s, std::int64_t &val) {
+   for (int i = 0; i < 100000; i++) {
+     s.lock();
+     val++;
+     s.unlock();
+   }
+ }
+```
+
+We're repeatedly accessing the same two pieces of memory (the state of the spinlock in our `lock` and `unlock` methods, and the shared value `val`). While we may initially miss in the first iteration of our loop, we should not in the thousands of remaining iterations.
+
+#### Capacity Misses
+
+Capacity misses occur when the amount of data we're accessing is simply too large to fit into our cache. For example, if we're iterating over 1GB of data, that won't completely fit into a 32kB L1 cache.
+
+Is the large percentage of L1 cache loads being misses a result of cold-start misses? 
+
+Unlikely. Let's think about the size of the data we're accessing. We're still only accessing two pieces of data we're accessing (our lock state, and shared value `val`). Our lock state is a `std::atomic<bool>` with conservatively only takes up 1 bytes. Our value, `val`, is a `std::uint64_t`, which is 8 bytes. That means together we're only using 9 bytes of data.
+
+9 bytes of data is not large enough to cause capacity misses in a modern L1 data cache.
+
+#### Conflict Misses
+
+#### Coherence Misses
+
 ## A Spinlock with Active Backoff
 
 ## A Spinlock with Passive Backoff
