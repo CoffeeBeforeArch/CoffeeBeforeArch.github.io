@@ -300,7 +300,7 @@ lock again.
 
 What we've done is replace our writes while the lock is take with reads. This is good because read-only copies of a cache line exist in the caches of multiple cores at the same time. This means that each of our waiting threads can read a local copy of the spinlock state from their own L1 caches until the thread with the lock writes that the lock is free. This will invalidate the all copies of the cache line, and the waiting threads will then read the update that the spinlock has become free.
 
-### Low Level Assembly
+### Low-Level Assembly
 
 Let's take a look at how our low-level assembly for our benchmark looks with this new optimization:
 
@@ -376,6 +376,79 @@ When the lock is released, all threads spinning in the second `while` loop (our 
 To solve this, we need to limit the number of threads that can break out of our waiting loop when the lock is freed. We can do this by adding backoff to this loop.
 
 ### The Active Backoff Optimization
+
+To keep our threads from immediately breaking out of the second `while` loop, we will be adding a small delay between each read of the spinlock state. Here is our modified `lock` method:
+
+```cpp
+   // Locking mechanism
+   void lock() {
+     while (1) {
+       // Try and grab the lock
+       if (!locked.exchange(true)) return;
+ 
+       // Wait for the lock to be free
+       do {
+         // Pause for some number of iterations
+         for (volatile int i = 0; i < 150; i += 1)
+           ;
+         // Read the lock state
+       } while (locked.load());
+     }
+   }
+```
+
+Our `lock` method is almost identical to our spinning locally implemention, with the exception of our loop where we read the state of the lock until it is free. Instead of reading the lock state as fast as possible, we'll insert a configurable delay using a dummy `for` loop.
+
+But why insert a delay here? If threads read the state of the lock as fast as possible, it's likely that almost all the threads all break out at and compete for the lock at the same time. However, if we add a delay in this loop, we increase the probability that some threads will get caught up executing the delay instructions, while others (but not _all_ the threads) break out at try and get the lock. 
+
+### Low-Level Assembly
+
+Let's take a look at how our low-level assembly for our benchmark looks with this new optimization:
+
+```assembly
+  0.42 │20:┌─→mov     %edi,%ecx              
+ 17.29 │   │  xchg    %cl,(%rax)             
+  0.01 │   │  test    %cl,%cl                
+  0.01 │   │↓ je      67                     
+  0.09 │   │  nop                            
+  0.35 │30:│  movl    $0x0,-0x4(%rsp)        
+  0.07 │   │  mov     -0x4(%rsp),%ecx        
+  0.02 │   │  cmp     $0x95,%ecx             
+       │   │↓ jg      5e                     
+  0.06 │   │  nop                            
+  1.77 │48:│  mov     -0x4(%rsp),%ecx        
+  1.44 │   │  inc     %ecx                   
+ 15.57 │   │  mov     %ecx,-0x4(%rsp)        
+ 21.50 │   │  mov     -0x4(%rsp),%ecx        
+  0.07 │   │  cmp     $0x95,%ecx             
+  8.49 │   │↑ jle     48                     
+ 13.96 │5e:│  movzbl  (%rax),%ecx            
+  0.04 │   │  test    %cl,%cl                
+  0.02 │   │↑ jne     30                     
+  0.35 │   │↑ jmp     20                     
+  2.54 │67:│  incq    (%rsi)                 
+ 15.93 │   │  xchg    %cl,(%rax)             
+       │   ├──dec     %edx                   
+  0.00 │   └──jne     20                     
+```
+
+Our assembly is very similar to our spinning locally implementation, with the exception of the extra instructions for our delay `for` loop. This loop is set up at label `30:`, and begins at label `48:`.
+
+### Performance
+
+Here are the end-to-end performance numbers for 1, 2, 4, and 8 threads:
+
+```
+---------------------------------------------------------------------
+Benchmark                           Time             CPU   Iterations
+---------------------------------------------------------------------
+active_backoff/1/real_time       1.05 ms        0.054 ms          679
+active_backoff/2/real_time       2.60 ms        0.081 ms          281
+active_backoff/4/real_time       9.49 ms        0.121 ms           75
+active_backoff/8/real_time       50.5 ms        0.287 ms           14
+```
+
+Another huge improvement! Compared to our spinlock with only the locally spinning optimization, our end-to-end execution time went down from 10.4ms to 2.60ms for 2 threads, 28.9ms to 9.49ms for 4 threads, and 91.4ms to 50.5ms for 8 threads. While this is a great improvement in performance, we're wasting power executing all the instructions for the `for` loop that generates our delay. We can look at addressing this using a passive form of backoff.
 
 ## A Spinlock with Passive Backoff
 
