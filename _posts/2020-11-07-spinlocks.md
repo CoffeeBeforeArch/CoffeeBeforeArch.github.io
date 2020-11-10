@@ -350,6 +350,33 @@ Down from ~50% to ~5%! A huge improvement. While this is a great improvement, we
 
 ## A Spinlock with Active Backoff
 
+Before we jump into our active backoff optimization implementation, let's try and understand where we have bursty contention in our spinlock implementation.
+
+### Bursty Contention
+
+Our bursty contention stems from when the thread currently holding the lock releases the lock. Let's take another look at our lock method to understand this:
+
+```cpp
+   // Lock the spinlock
+   void lock() {
+     // Keep trying until we get the lock
+     while (1) {
+       // Try and grab the lock
+       if (!locked.exchange(true)) return;
+ 
+       // Read the spinlock state
+       while (locked.load())
+         ;
+     }
+   }
+```
+ 
+When the lock is released, all threads spinning in the second `while` loop (our locally spinning optimization) read that the lock is released, and race to the atomic exchange to try and grab the lock. However, only one thread out of the potentially many that try for the lock will get the lock. All the other threads will then wastefully still perform their atomic exchange, fail to get the lock, and go back to reading the lock state, waiting for it to become free again.
+
+To solve this, we need to limit the number of threads that can break out of our waiting loop when the lock is freed. We can do this by adding backoff to this loop.
+
+### The Active Backoff Optimization
+
 ## A Spinlock with Passive Backoff
 
 ## A Spinlock with Non-Constant Backoff
