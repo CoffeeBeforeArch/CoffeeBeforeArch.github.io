@@ -452,6 +452,93 @@ Another huge improvement! Compared to our spinlock with only the locally spinnin
 
 ## A Spinlock with Passive Backoff
 
+While everyone cares about performance (to some degree), an increasing number of people also care about power-consumption (especially in massive data-centers). One way we can intuitively save on power is by improving performance so that our application finishes faster (the processor is active for a shorter amount of time). However, there are ways we can improve power-consumption for applications that run for (approximately) the same length of time.
+
+For spin-wait loops like our spinlock, we can use the `_mm_pause()` intrinsic for this exact purpose.
+
+### The Pause Intrinsic
+
+[Here](https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_pause&expand=4141) is the `_mm_pause` intrinsic from the intel Intrinsics Guide. If we look at the description, it says:
+
+```txt
+Provide a hint to the processor that the code sequence is a spin-wait loop. This can help improve the performance and power consumption of spin-wait loops.
+```
+
+With our original active backoff implementation, we got a performance benefit from creating a finite pause within our loop that polls (reads) the state of our spinlock. However, we got this at the cost of thousands, millions, or billions of extra instructions (depending on how long our application runs) executed for our dummy `for` loop.
+
+We can use the `_mm_pause()` intrinsic to get this to the same effect (generating a delay between reads of our spinlock state), but without executing a huge number of extra instructions.
+
+### The Passive Backoff Optimization
+
+Let's take a look at our spinlock's `lock` method but with passive instead of active backoff. For this, we will be swapping out our `for` loop with calls to the `_mm_pause()` intrinsic. Here's how that may look:
+
+```cpp
+   // Locking mechanism
+   void lock() {
+     while (1) {
+       // Try and grab the lock
+       if (!locked.exchange(true)) return;
+ 
+       do {
+         // Pause for some number of iterations
+         for (int i = 0; i < 4; i++) _mm_pause();
+ 
+         // Check to see if the lock is free
+       } while (locked.load());
+     }
+   }
+```
+
+The core functionality is exactly the same as our active backoff implementation, with the sole exception of how we generate our delays. Just like we could configure the number of iterations of our for loop to control our delay in the previous implementation, we can tune how many times we use the pause intrinsic as well.
+
+### Low-Level Assembly
+
+Let's take a look at how our low-level assembly for our benchmark looks with this new optimization:
+
+```assembly
+  0.34 │20:┌─→mov     %edi,%ecx                  
+ 17.32 │   │  xchg    %cl,(%rax)                 
+  0.01 │   │  test    %cl,%cl                    
+  0.01 │   │↓ je      41                         
+  0.09 │   │  nop                                
+ 12.61 │30:│  pause                              
+ 12.39 │   │  pause                              
+ 12.32 │   │  pause                              
+ 12.06 │   │  pause                              
+ 15.37 │   │  movzbl  (%rax),%ecx                
+  0.03 │   │  test    %cl,%cl                    
+  0.05 │   │↑ jne     30                         
+  0.42 │   │↑ jmp     20                         
+  2.75 │41:│  incq    (%rsi)                     
+ 14.23 │   │  xchg    %cl,(%rax)                 
+       │   ├──dec     %edx                       
+  0.00 │   └──jne     20                        
+```
+
+No major structural changes compare to our previous implementation. We start by trying to get the lock with an atomic exchange (`xchg`). If we get the lock, we increment the shared value (`incq`), free the lock with another atomic exchange (`xchg`), decrement the loop counter (`dec`), and return to the top of the loop if there are more iterations.
+
+If we didn't get the look, we go to our spinning locally `do while` loop with passive backoff starting at label `30:`. There, we see 4 `pause` instructions (coming from our calls to the `_mm_pause()` intrinsic), followed by our read of the spinlock state that decides whether we pause again, or try and grab the lock.
+
+### Performance
+
+Here are the end-to-end performance numbers for 1, 2, 4, and 8 threads:
+
+```txt
+----------------------------------------------------------------------
+Benchmark                            Time             CPU   Iterations
+----------------------------------------------------------------------
+passive_backoff/1/real_time       1.03 ms        0.054 ms          676
+passive_backoff/2/real_time       2.48 ms        0.082 ms          276
+passive_backoff/4/real_time       9.59 ms        0.110 ms           70
+passive_backoff/8/real_time       46.7 ms        0.236 ms           15
+```
+
+I've roughly matched the performance of our active backoff and passive backoff benchmarks. However, you may see slight differences. This is to be expected because thread scheduling is non-deterministic, and is heavily influenced by the current load of the CPUs. Therefore, we'll deem the values close enough.
+
+### Power
+
+As stated at the start of this section, this optimization was primarily for power consumption.
+
 ## A Spinlock with Non-Constant Backoff
 
 ### Exponential Backoff
