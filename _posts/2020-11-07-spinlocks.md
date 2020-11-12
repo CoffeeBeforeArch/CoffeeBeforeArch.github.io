@@ -537,7 +537,56 @@ I've roughly matched the performance of our active backoff and passive backoff b
 
 ### Power
 
-As stated at the start of this section, this optimization was primarily for power consumption.
+To reason about the power-consumption of our applications, we'll be looking at the total number of instructions executed to compare the amount of work being done, then directly query power performance counters.
+
+#### Instructions Executed
+
+Let's start our power-consumption analysis by comparing the total number of instructions executed. Let's compare the 8-thread benchmark case for our active and passive passive backlock implementations with the number of benchmark iterations set to `50`.
+
+Here are the number instructions executed for our active backoff implementation:
+
+```txt
+55,227,656,500      instructions              #    0.76  insn per cycle
+```
+
+Around 55 billion. Because thread scheduling is non-deterministic, this number varied from run to run, but generally fell between the 45-60 billion instruction range.
+
+Now let's see how many instructions were executed for our passive backoff implementation:
+
+```txt
+1,012,803,760      instructions              #    0.01  insn per cycle         
+```
+
+A 55x reduction in instructions! But this should make sense. In our active backoff implementation, we're executing billions of extra instructions just to induce the delay inside of our locally spinning loop. In our passive backoff implementation, we're using a dedicated instruction that adds a finite delay to our pipeline, allowing us to simply stop doing work for short periods of time.
+
+Intuitively, we can reason that our passive backoff implementation that executes 55x fewer instructions and with roughly equivilant end-to-end execution time as our active backoff should consume less power while running.
+
+##### Additional Statistics
+
+One thing you may notice if you look at our other performance counter stats for our passive backoff benchmark is that we have a very high branch miss-prediction and L1 data cache miss rate:
+
+```txt
+216,996,864      branches                  #   12.154 M/sec                  
+ 35,495,595      branch-misses             #   16.36% of all branches        
+240,163,142      L1-dcache-loads           #   13.452 M/sec                  
+147,908,665      L1-dcache-load-misses     #   61.59% of all L1-dcache hits  
+```
+
+What's going on? Let's think about what we know about our benchmarks and spinlock implementations. In both benchmarks, we have a heavy contention scenario where threads fight over the cache line(s) containing our spinlock state and shared value `val`. Furthermore, when a thread actually sees the lock as free or successfully gets the lock is non-deterministic, and could be difficult for our branch predictor to guess correctly. 
+
+These things explain our observations in passive backoff, but why do these not look like a problem in our active backoff implementation?
+
+```txt
+ 7,871,605,800      branches                  #  576.093 M/sec                  
+    76,998,863      branch-misses             #    0.98% of all branches        
+15,543,237,429      L1-dcache-loads           # 1137.551 M/sec                  
+   106,735,606      L1-dcache-load-misses     #    0.69% of all L1-dcache hits  
+```
+
+Just look at the raw counter values! We're only doing ~217 million branches in our passive backoff benchmark, but ~7.9 billion in our active backoff benchmark. Likewise, our L1 data cache load increased from ~240 million to ~15.5 billion! Most of these loads and branches are from the dummy `for` loop we added to insert a delay. These are hiding the underlying randomness and lack of cache-locality that is fundamental to our application.
+
+#### Power Performance Counters
+
 
 ## A Spinlock with Non-Constant Backoff
 
