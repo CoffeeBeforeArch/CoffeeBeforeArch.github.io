@@ -587,6 +587,39 @@ Just look at the raw counter values! We're only doing ~217 million branches in o
 
 #### Power Performance Counters
 
+A more direct way that we can estimate the power consumption of our benchmarks is by directly accessing the power performance counters. Specifically, we'll be looking at `power/energy-pkg/`.
+
+Here is the estimate in power consumption for our active backoff benchmark:
+
+```txt
+-------------------------------------------------------------------------
+Benchmark                               Time             CPU   Iterations
+-------------------------------------------------------------------------
+active_backoff/8/iterations:50       46.3 ms        0.172 ms           50
+
+ Performance counter stats for 'system wide':
+
+            190.59 Joules power/energy-pkg/                                           
+
+       2.337446416 seconds time elapsed
+```
+
+And here is the estimate for our passive backoff benchmark:
+
+```txt
+--------------------------------------------------------------------------
+Benchmark                                Time             CPU   Iterations
+--------------------------------------------------------------------------
+passive_backoff/8/iterations:50       48.7 ms        0.197 ms           50
+
+ Performance counter stats for 'system wide':
+
+            151.31 Joules power/energy-pkg/                                           
+
+       2.457350713 seconds time elapsed
+```
+
+Great! Notice that even though our performance was slightly worse and our benchmark runs for longer, we're still using significantly less power (151 Joules vs. 190 Joules).
 
 ## A Spinlock with Non-Constant Backoff
 
