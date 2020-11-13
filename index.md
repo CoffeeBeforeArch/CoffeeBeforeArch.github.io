@@ -42,6 +42,10 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Biased Branches]({% post_url 2020-09-16-biased-branches %})
 
+## Spinlocks
+
+- [Spinlocks - Part 1 - A Basic Spinlock]({% post_url 2020-11-07-spinlocks-1 %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
