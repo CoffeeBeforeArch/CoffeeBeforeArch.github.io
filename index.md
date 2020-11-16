@@ -48,7 +48,9 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Spinlocks - Part 2 - Spinning Locally]({% post_url 2020-11-07-spinlocks-2 %})
 
-- [Spinlocks - Part 3 - Spinning Locally]({% post_url 2020-11-07-spinlocks-3 %})
+- [Spinlocks - Part 3 - Active Backoff]({% post_url 2020-11-07-spinlocks-3 %})
+
+- [Spinlocks - Part 3 - Passive Backoff]({% post_url 2020-11-07-spinlocks-4 %})
 
 ## GPGPU-Sim Tutorials
 
