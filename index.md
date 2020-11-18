@@ -52,6 +52,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Spinlocks - Part 4 - Passive Backoff]({% post_url 2020-11-07-spinlocks-4 %})
 
+- [Spinlocks - Part 4 - Exponential and Random Backoff]({% post_url 2020-11-07-spinlocks-5 %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
