@@ -56,6 +56,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Spinlocks - Part 6 - A Ticket Spinlock]({% post_url 2020-11-07-spinlocks-6 %})
 
+- [Spinlocks - Part 7 - The pthread Spinlock]({% post_url 2020-11-07-spinlocks-7 %})
+
 ## GPGPU-Sim Tutorials
 
 - [Introduction]({% post_url 2020-03-30-gpgpu-sim-1 %})
