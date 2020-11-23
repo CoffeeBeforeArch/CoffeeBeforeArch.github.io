@@ -42,6 +42,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Biased Branches]({% post_url 2020-09-16-biased-branches %})
 
+- [Compiler Memory Re-Ordering]({% post_url 2020-11-21-compiler-memory-ordering %})
+
 ## Spinlocks
 
 - [Spinlocks - Part 1 - A Basic Spinlock]({% post_url 2020-11-07-spinlocks-1 %})
