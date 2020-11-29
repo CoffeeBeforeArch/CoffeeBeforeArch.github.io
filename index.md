@@ -45,6 +45,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Compiler Memory Re-Ordering]({% post_url 2020-11-21-compiler-memory-ordering %})
 
+- [Hardware Memory Re-Ordering]({% post_url 2020-11-29-hardware-memory-ordering %})
+
 ## Spinlocks
 
 - [Spinlocks - Part 1 - A Basic Spinlock]({% post_url 2020-11-07-spinlocks-1 %})
