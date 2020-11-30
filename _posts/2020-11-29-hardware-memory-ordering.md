@@ -5,6 +5,9 @@ title: Hardware Memory Re-Ordering
 
 # Hardware Memory Re-Ordering
 
+Even if we use software memory barriers to prevent compilers from re-ordering memory accesses in our output assembly, they still might be re-ordered by the hardware during execution. Exactly how these accesses can be be re-ordered is dictated the processor's memory consistency model.
+
+In this blog post, we'll be looking at an example of x86 Store-Load re-ordering, and how we can prevent it using hardware barriers.
 
 ### Link to the source code
 
