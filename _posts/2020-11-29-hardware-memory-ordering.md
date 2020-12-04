@@ -72,9 +72,15 @@ In this case, Thread 1 executes its write and read before Thread 2 does either. 
 
 ### Takeaways
 
-One thing to notice from our sequential consistency test cases is that the instructions from each thread execute in a sequential order (e.g, Thread 1 always executes `Write A, 1` before `Read B` regardless of how instructions from Thread 2 are interleaved in between). While reasoning about interleavings of instructions across threads can be difficult, we are at least safe from instructions being reordered within a single thread.
+One thing to notice from our sequential consistency test cases is that the instructions from each thread execute in a sequential order (e.g, Thread 1 always executes `Write A, 1` before `Read B` regardless of how instructions from Thread 2 are interleaved in between). While reasoning about interleavings of instructions across threads can be difficult, we are safe from instructions being reordered within a single thread.
 
-## Relaxed Memory Consistency Models
+## Relaxed Memory Consistency Models (x86)
+
+Computer architecture is all about tradeoffs. While sequential consistency is simple and intuitive, it places restrictions on execution that limit performance. By relaxing these restriction, we can increase performance at the cost of increasing hardware and programming model complexity.
+
+To relax the memory model, we relax the rules around reordering reads and writes with respect to other reads and writes. In this post, we're going to focus on relaxation in the Intel x86 memory model. This is described in detail in section 8.2 of the [Intel Software Developer Manual](https://software.intel.com/content/www/us/en/develop/download/intel-64-and-ia-32-architectures-sdm-combined-volumes-1-2a-2b-2c-2d-3a-3b-3c-3d-and-4.html).
+
+### Basics of the x86 Memory Model
 
 ## Final Thoughts
 
