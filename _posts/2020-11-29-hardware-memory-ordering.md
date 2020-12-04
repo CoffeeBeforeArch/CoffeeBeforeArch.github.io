@@ -28,18 +28,53 @@ In a sequentially consistent system, each memory access for a thread becomes glo
 
 In a sequentially consistent system, what combinations of values are possible for `A` and `B`? There are three possible scenarios. Let's take a look at the globally visable order of instructions for each.
 
-### Case 1: A = 1, and B = 1
+### Case 1: A = 1, B = 1
 
-Consider the follwing interleaving of memory instructions:
+Consider the follwing interleaving of memory instructions (initially `A == 0` and `B == 0`):
 
-| Instruction | Issuing Thread |
-|:------------|:---------------|
-|`Write A, 1` |    Thread 1    |
-|`Write B, 1` |    Thread 2    |
-|`Read B`     |    Thread 1    |
-|`Read A`     |    Thread 2    |
+| Instruction | Issuing Thread | A, B |
+|:------------|:---------------|:-----|
+|`Write A, 1` |    Thread 1    | 1, 0 |
+|`Write B, 1` |    Thread 2    | 1, 1 |
+|`Read B`     |    Thread 1    | 1, 1 |
+|`Read A`     |    Thread 2    | 1, 1 |
 
-In this case, the writes to `A` and `B` both occur before the reads of `A` and `B`.
+In this case, the writes to `A` and `B` occur before the reads of `A` and `B`. This leads to the result of `A == 1` and `B == 1` as the final result.
+
+This same result could be achieved if the order of the writes is reversed, or the order of reads is reversed.
+
+### Case 2: A = 0, B = 1
+
+Consider the follwing interleaving of memory instructions (initially `A == 0` and `B == 0`):
+
+| Instruction | Issuing Thread | A, B |
+|:------------|:---------------|:-----|
+|`Write B, 1` |    Thread 2    | 0, 1 |
+|`Read A`     |    Thread 2    | 0, 1 |
+|`Write A, 1` |    Thread 1    | 1, 1 |
+|`Read B`     |    Thread 1    | 1, 1 |
+
+
+In this case, Thread 2 executes its write and read before Thread 1 does either. This leads to the result of `A == 0`, and `B == 1`
+
+### Case 3: A = 1, B = 0
+
+Consider the follwing interleaving of memory instructions (initially `A == 0` and `B == 0`):
+
+| Instruction | Issuing Thread | A, B |
+|:------------|:---------------|:-----|
+|`Write A, 1` |    Thread 1    | 1, 0 |
+|`Read B`     |    Thread 1    | 1, 0 |
+|`Write B, 1` |    Thread 2    | 1, 1 |
+|`Read A`     |    Thread 2    | 1, 1 |
+
+In this case, Thread 1 executes its write and read before Thread 2 does either. This leads to the result of `A == 1`, and `B == 0` (the opposite of Case 2).
+
+### Takeaways
+
+One thing to notice from our sequential consistency test cases is that the instructions from each thread execute in a sequential order (e.g, Thread 1 always executes `Write A, 1` before `Read B` regardless of how instructions from Thread 2 are interleaved in between). While reasoning about interleavings of instructions across threads can be difficult, we are at least safe from instructions being reordered within a single thread.
+
+## Relaxed Memory Consistency Models
 
 ## Final Thoughts
 
