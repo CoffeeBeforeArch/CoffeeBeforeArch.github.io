@@ -1,13 +1,13 @@
 ---
 layout: default
-title: Hardware Memory Re-Ordering
+title: Hardware Memory Reordering
 ---
 
-# Hardware Memory Re-Ordering
+# Hardware Memory Reordering
 
-Even if we use software memory barriers to prevent compilers from re-ordering memory accesses in our generated assembly, they still might be re-ordered by the hardware during execution. How these accesses can be be re-ordered is a function of the processor's memory consistency model.
+Even if we use software memory barriers to prevent compilers from reordering memory accesses in our generated assembly, they still might be reordered by the hardware during execution. How these accesses can be be reordered is a function of the processor's memory consistency model.
 
-In this blog post, we'll be looking at an example of x86 Store-Load re-ordering in an implementation of Peterson's algorithm, and how we can prevent it using hardware barriers.
+In this blog post, we'll be looking at an example of x86 Store-Load reordering in an implementation of Peterson's algorithm, and how we can prevent it using hardware barriers.
 
 ### Link to the source code
 
@@ -17,7 +17,7 @@ In this blog post, we'll be looking at an example of x86 Store-Load re-ordering 
 
 ## Background on Sequential Consistency
 
-Hardware memory re-ordering occurs when memory accesses become globally visible in an order different that the accesses are appear in a program's assembly. How a processor is allowed to re-order memory accesses is a function of the processor's memory consistency model. The most intuitive of these models is sequential consistency.
+Hardware memory reordering occurs when memory accesses become globally visible in an order different that the accesses are appear in a program's assembly. How a processor is allowed to reorder memory accesses is a function of the processor's memory consistency model. The most intuitive of these models is sequential consistency.
 
 In a sequentially consistent system, each memory access for a thread becomes globally visible in program order. However, memory accesses from different threads may still be interleaved. Consider the following simple pseudo-assembly example where `A` and `B` are both initially `0`:
 
@@ -117,7 +117,7 @@ Even if a programmer orders operations correctly in their high-level language (e
 
 Jeff Preshing's blog post [Memory Reodering Caught in the Act](https://preshing.com/20120515/memory-reordering-caught-in-the-act/) is a great read that includes a short benchmark to shows this exact example of hardware Write -> Read reordering.
 
-You can find my C++ re-implementation of the benchmark [here](https://github.com/CoffeeBeforeArch/misc_code/blob/master/hw_barrier/hw_barrier.cpp). This can be compiled with:
+You can find my C++ implementation of the benchmark from that post [here](https://github.com/CoffeeBeforeArch/misc_code/blob/master/hw_barrier/hw_barrier.cpp). This can be compiled with:
 
 ```bash
 g++ hw_barrier.cpp -o hw_barrier -O2 -lpthread
@@ -397,9 +397,9 @@ It's natural to think that hardware memory reordering requires out-of-order (OoO
 
 ![kaby lake arch](https://en.wikichip.org/w/images/7/7e/skylake_block_diagram.svg)
 
-In the Memory Subsystem, you can see a block titled "Store Buffer & Forwarding". A store buffer is there to do exactly what it sounds like: buffer stores. Unlike loads, stores are not typically on the critical path (instructions often stall waiting on data to be loaded, not on data being written). Instead of making stores immediately visible, they can first be buffered in a store buffer, and written back gradually as bandwidth comes available.
+In the Memory Subsystem, you can see a block labeled "Store Buffer & Forwarding". A store buffer is there to do exactly what it sounds like: buffer stores. Unlike loads, stores are not typically on the critical path (instructions often stall waiting on data to be loaded, not on data being written). Instead of making stores immediately visible, they can first be buffered in a store buffer, and written back gradually as bandwidth becomes available.
 
-In an in-order processor, a thread could first perform a store that goes into the store buffer. At this point, the store is the memory subsystem's problem (to the core, that operation is done). The thread could then issue a read which completes before the previous store has drained out of the store buffer! No OoO execution required!
+In an in-order processor, a thread could first perform a store that goes into the store buffer. At this point, the store is the memory subsystem's problem (to the core, that operation is complete). The thread could then issue a read which completes before the previous store has drained out of the store buffer! No OoO execution required!
 
 ## How Do Fence Instruction Work?
 
