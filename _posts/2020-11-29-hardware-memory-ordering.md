@@ -391,6 +391,27 @@ Finally! The correct answer! Let's take a look at the assembly:
 
 The only major difference is that we have an `mfence` instrcution after our stores to `interested[tid]` and `turn`.
 
+## Does Hardware Reodering Require OoO Execution?
+
+It's natural to think that hardware memory reordering requires out-of-order (OoO) execution. However, this is not the case. Hardware memory reordering can happen even in an in-order processor! To understand this, let's take a look at the [architecture block diagram](https://en.wikichip.org/wiki/intel/microarchitectures/kaby_lake) for Intel's Kaby Lake Processors (which does OoO execution) from wikichip.
+
+![kaby lake arch](https://en.wikichip.org/w/images/7/7e/skylake_block_diagram.svg)
+
+In the Memory Subsystem, you can see a block titled "Store Buffer & Forwarding". A store buffer is there to do exactly what it sounds like: buffer stores. Unlike loads, stores are not typically on the critical path (instructions often stall waiting on data to be loaded, not on data being written). Instead of making stores immediately visible, they can first be buffered in a store buffer, and written back gradually as bandwidth comes available.
+
+In an in-order processor, a thread could first perform a store that goes into the store buffer. At this point, the store is the memory subsystem's problem (to the core, that operation is done). The thread could then issue a read which completes before the previous store has drained out of the store buffer! No OoO execution required!
+
+## How Do Fence Instruction Work?
+
+It's natural to be inquisitve about how the the x86 instructions work at the hardware level. Below is a potential way for each:
+
+- `_mm_sfence`
+  - To ensure all previous stores have become globally visiible, the hardware could stall all later stores (in program order), until all earlier loads have retired and the store buffer has been drained, before the `sfence` instruction itself retires.
+- `_mm_lfence`
+  - Similar to the `_mm_lfence`, the architecture could stall later loads (in program order), until all earlier loads have completed, before the `lfence` instruction itself retires.
+- `_mm_mfence`
+  - Naturally, the `mfence` instruction is a combination of the previous two. The architecture could stall all later loads and stores (in program order) until all ealier loads and stores have retired and the store buffer has been drained, before the `mfence` instruction itself retures.
+
 ## Final Thoughts
 
 Memory consistency can be difficult to understand. Even with the relatively strict consistency model of x86 (compared to weaker models used by ARM and POWER), bugs related to hardware memory reordering often go against our intuition, and often require some very careful thought to get around.
