@@ -403,14 +403,16 @@ In an in-order processor, a thread could first perform a store that goes into th
 
 ## How Do Fence Instruction Work?
 
-It's natural to be inquisitve about how the the x86 instructions work at the hardware level. Below is a potential way for each:
+It's natural to be inquisitve about how the the x86 instructions work at the hardware level. Below are some quick thoughts on how they could work:
 
 - `_mm_sfence`
-  - To ensure all previous stores have become globally visiible, the hardware could stall all later stores (in program order), until all earlier loads have retired and the store buffer has been drained, before the `sfence` instruction itself retires.
+  - To ensure all previous stores have become globally visible, the hardware could stall all later stores (in program order), until all earlier stores have retired and the store buffer has been drained, before the `sfence` instruction itself retires.
 - `_mm_lfence`
-  - Similar to the `_mm_lfence`, the architecture could stall later loads (in program order), until all earlier loads have completed, before the `lfence` instruction itself retires.
+  - Similar to the `_mm_sfence`, the architecture could stall later loads (in program order), until all earlier loads have completed, before the `lfence` instruction itself retires.
 - `_mm_mfence`
-  - Naturally, the `mfence` instruction is a combination of the previous two. The architecture could stall all later loads and stores (in program order) until all ealier loads and stores have retired and the store buffer has been drained, before the `mfence` instruction itself retures.
+  - Naturally, the `mfence` instruction is a combination of the previous two. The architecture could stall all later loads and stores (in program order) until all ealier loads and stores have retired and the store buffer has been drained, before the `mfence` instruction itself retuires.
+
+There are of course exceptions and nuances not covered by these descriptions, but I'll leave the [patent reading](https://www.freepatentsonline.com/8959314.html) as an exercise for the reader.
 
 ## Final Thoughts
 
