@@ -135,6 +135,8 @@ We'll start by looking at:
 
 After this we'll run a short benchmark to show how memory reordering fundamentally breaks this implementation, and how we can fix this with a dedicated memory barrier instruction.
 
+You can find the full benchmark [here](https://github.com/CoffeeBeforeArch/misc_code/blob/master/hw_barrier/peterson.cpp).
+
 ### Required State
 
 Peterson's algorithm fundamentally requires two pieces of state:
@@ -243,7 +245,88 @@ int main() {
 
 Here, we create our shared value `val` and `Peterson` object, spawn two threads (with thread IDs `0` and `1` respectively), wait for them to finish running the `work` function, then print out the final result value of `val`.
 
-### Running the Benchmark
+### Compiling and Running the Benchmark
+
+We can compile our benchmark `peterson.cpp` using the following command:
+
+```bash
+g++ peterson.cpp -o peterson -O2 -lpthread
+```
+
+What we'd expect to be printed at the end of execution (if our implementation of Peterson's algorithm gives us mutual exclusion) is 2 million (from 1 million increments performed by each thread). If our implementation does not give us mutual exclusion, the final value of `val` may be less than 2 million because of overlapping increments from our two threads.
+
+Here are the results from a few runs of the benchmark:
+
+```txt
+FINAL VALUE IS: 199999998
+FINAL VALUE IS: 199999991
+FINAL VALUE IS: 199999993
+FINAL VALUE IS: 199999992
+```
+
+Definitely a bug! `1e8 + 1e8` does not equal `199999998` (or any of our other values)! So what happened? 
+
+We can first look at our assembly to see if the order of our instructions is the problems. Here's are the output from perf:
+
+```assembly
+  0.00 │18:┌─→movl    $0x1,0x4(%rax)     
+  0.20 │   │  movl    $0x0,0x8(%rax)     
+       │   │↓ jmp     36                 
+       │   │  nop                        
+ 25.73 │30:│  mov     (%rax),%edx        
+ 34.10 │   │  test    %edx,%edx          
+  0.00 │   │↓ je      3d                 
+ 29.10 │36:│  mov     0x8(%rax),%edx     
+  0.22 │   │  test    %edx,%edx          
+  3.79 │   │↑ je      30                 
+  6.86 │3d:│  incl    (%rsi)             
+       │   │  movl    $0x0,0x4(%rax)     
+       │   ├──dec     %ecx               
+       │   └──jne     18                 
+```
+
+Nothing stands out as immediately incorrect. First, our threads say they are interested in entering the critical section and yield priority to each other using the `movl` instructions starting at label `18:`.
+
+Next, our threads wait inside of the `while` loop starting at label `30:`, where they evaluate the two conditions (at labels `30:` and `36:`). 
+
+If one of these conditions becomes false, a thread does the increment of the shared value (`incl`), stores `0` to say it is no longer intersted in the critical section, and continues executing the `for` loop in our `work` function.
+
+Since the ordering of these instructions make sense in our binary, something must be getting reordered in hardware. Let's think about where that could be happening in our high-level C++. As a reminder, here's our `lock` method:
+
+```cpp
+  // Method for locking w/ Peterson's algorithm
+  void lock(int tid) {
+    // Mark that this thread wants to enter the critical section
+    interested[tid] = 1;
+
+    // Assume the other thread has priority
+    int other = 1 - tid;
+    turn = other;
+
+    // Wait until the other thread finishes or is not interested
+    while (turn == other && interested[other])
+      ;
+  }
+```
+
+We know that Processor Consistency says writes may be reordered with subsequent reads, so we will focus on those relationships in our program. Specifically, we will focus on the conditions being checked in our `while` loop because that is where our threads wait for permission to enter the critical section.
+
+First, let's consider `turn`. Each thread yields priority by setting `turn = other`, then waiting on `turn == other` in the `while` loop. If the read of `turn` for the comparison is reordered before the write, the thread could break out of the `while` loop and exist the critical section. Is this possible?
+
+No! This write and read can not be reordered because they are the same location! The developer manual specifically says this is not allowed:
+
+- _"Reads may be reordered with older writes to different locations but not with older writes to the same location."_
+
+Let's now consider the write-read pair of `interested[tid]` and `interested[other]`. Our thread first says it's interested in entering the critical section by writing to `1` to `interested[tid]`. In the `while` loop, it then waits for the other thread to no longer be interested in the critical section by evaluating `interested[other] == 1`.
+
+If the two reads (one by each thread) of `interested[other]` are reordered before the two writes (one by each thread) to `interested[tid]`, each thread would think that the other is not interested in the critical section, break out of the `while` loop, and enter the critical section. Is this possible?
+
+Yes! `interested[tid]` and `interested[other]` are two different memory locations, meaning that this write-read pair can be reordered!
+
+Now that we understand where our bug is coming from, we can ask the million dollar question. How do we prevent this re-ordering?
+
+### Hardware Memory Barriers
+
 
 ## Final Thoughts
 
