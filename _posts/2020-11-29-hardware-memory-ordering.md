@@ -94,7 +94,7 @@ The x86 architecture follows a consistency model called Processor Consistency (r
 - _"Reads and writes always appear in programmed order at
 the system bus—except for the following situation where processor ordering is exhibited. Read misses are permitted to go ahead of buffered writes on the system bus when all the buffered writes are cache hits and, therefore, are not directed to the same address being accessed by the read miss."_
 
-Processor consistency relaxes our Write -> Read ordering constraint, allowing writes to be reordered with subsequent reads. This introduces a fourth possible scenario for interleaved interleaved instructions for our two threads.
+Processor consistency relaxes our Write -> Read ordering constraint, allowing writes to be reordered with subsequent reads. This introduces a fourth possible scenario for interleaved instructions for our two threads.
 
 ### Case 4: A = 0, B = 0
 
@@ -124,6 +124,126 @@ g++ hw_barrier.cpp -o hw_barrier -O2 -lpthread
 ```
 
 ## Peterson's Algorithm for Mutual Exclusion
+
+To understand how hardware memory reordering can cause real-world bugs, let's take a look at a C++ implementation of Peterson's algorithm for two threads. [Peterson's algorithm](https://en.wikipedia.org/wiki/Peterson%27s_algorithm) is an algorithm for mutual exclusion where threads communicate through shared memory.
+
+We'll start by looking at:
+
+- What state is required for our implementation
+- How a thread gets access to a critical section
+- How a thread notifies it's done with a critical section
+
+After this we'll run a short benchmark to show how memory reordering fundamentally breaks this implementation, and how we can fix this with a dedicated memory barrier instruction.
+
+### Required State
+
+Peterson's algorithm fundamentally requires two pieces of state:
+
+- `interested` - An array of elements (equal to the number of threads) indicating each thread's interest in entering the critical section
+- `turn` - An element indicating which thread currently has priority to enter the critical section
+
+We can implement these as data members of a class called `Peterson`.
+
+```cpp
+// Simple class implementing Peterson's algorithm for mutual exclusion
+class Peterson {
+ private:
+  // Is this thread interested in the critical section
+  volatile int interested[2] = {0, 0};
+
+  // Who's turn is it?
+  volatile int turn = 0;
+};
+```
+
+Note, we have both our variables marked as `volatile` to keep them from being cached in registers (we need access of these variables to be in memory so that they are visable to both threads).
+
+### Gaining Access to the Critical Section
+
+The next things we need is a method where a thread will wait for access to a critical section. We'll call this method `lock`. Here is how I implemented mine:
+
+```cpp
+  // Method for locking w/ Peterson's algorithm
+  void lock(int tid) {
+    // Mark that this thread wants to enter the critical section
+    interested[tid] = 1;
+
+    // Assume the other thread has priority
+    int other = 1 - tid;
+    turn = other;
+
+    // Wait until the other thread finishes or is not interested
+    while (turn == other && interested[other])
+      ;
+  }
+```
+
+The first thing the calling thread does is index into our `interested` array using its thread ID (assumed to be either `0` or `1`), and write `1` to say that it is interested in entering the critical section.
+
+Next, the thread yields priority to the other thread by setting `turn` equal to the other thread's ID.
+
+Finally the thread enters a `while` loop waiting for either the other thread to yield priority, or to no longer be interested in entering the critical section.
+
+### Exiting the Critical Section
+
+The final thing we need is a method to notify that a thread is done with the critical section. We can call this method `unlock`. Here is how I implemented mine:
+
+```cpp
+  // Method for unlocking w/ Peterson's algorithm
+  void unlock(int tid) {
+    // Mark that this thread is no longer interested
+    interested[tid] = 0;
+  }
+```
+
+Notifying that a thread is done with the critical section is simple. The exiting thread just needs to say it is no longer interested in the critical section by writing `0` to its state in `interested`
+
+### Our Benchmark
+
+To test our implementation of Peterson's algorithm, we'll be using it to prevent simultaneous increments to a non-atomic integer. Here is the function called `work` that we'll have two thread run:
+
+```cpp
+// Work function
+void work(Peterson &p, int &val, int tid) {
+  for (int i = 0; i < 1e8; i++) {
+    // Lock using Peterson's algorithm
+    p.lock(tid);
+    // Critical section
+    val++;
+    // Unlock using Peterson's algorithm
+    p.unlock(tid);
+  }
+}
+```
+
+Here, we're using Peterson's algorithm to protect the increment of our shared value `val`.
+
+The `main` function that drives our benchmark is incredibly simple:
+
+```cpp
+int main() {
+  // Shared value
+  int val = 0;
+  Peterson p;
+
+  // Create threads
+  std::thread t0([&] { work(p, val, 0); });
+  std::thread t1([&] { work(p, val, 1); });
+
+  // Wait for the threads to finish
+  t0.join();
+  t1.join();
+
+  // Print the result
+  std::cout << "FINAL VALUE IS: " << val << '\n';
+
+  return 0;
+}
+```
+
+Here, we create our shared value `val` and `Peterson` object, spawn two threads (with thread IDs `0` and `1` respectively), wait for them to finish running the `work` function, then print out the final result value of `val`.
+
+### Running the Benchmark
 
 ## Final Thoughts
 
