@@ -76,11 +76,20 @@ One thing to notice from our sequential consistency test cases is that the instr
 
 ## Relaxed Memory Consistency Models (x86)
 
-Computer architecture is all about tradeoffs. While sequential consistency is simple and intuitive, it places restrictions on execution that limit performance. By relaxing these restriction, we can increase performance at the cost of increasing hardware and programming model complexity.
+Computer architecture is all about tradeoffs. While sequential consistency is simple and intuitive, it places restrictions on execution that limit performance. These restrictions include the following rules about memory reordering:
 
-To relax the memory model, we relax the rules around reordering reads and writes with respect to other reads and writes. In this post, we're going to focus on relaxation in the Intel x86 memory model. This is described in detail in section 8.2 of the [Intel Software Developer Manual](https://software.intel.com/content/www/us/en/develop/download/intel-64-and-ia-32-architectures-sdm-combined-volumes-1-2a-2b-2c-2d-3a-3b-3c-3d-and-4.html).
+|   Reordering   | Desciption |
+|:---------------|:------------|
+| Write -> Write | Writes are not reorded with older writes |
+| Write -> Read  | Reads are not reorded with older writes |
+| Read -> Read   | Reads are not reorded with older Reads |
+| Read -> Write  | Writes are not reorded with older Reads |
+
+By relaxing these restriction, we can increase performance at the cost of increasing hardware and programming model complexity. In this post, we're going to focus on relaxation in the Intel x86 memory model. This is described in detail in section 8.2 of the [Intel Software Developer Manual](https://software.intel.com/content/www/us/en/develop/download/intel-64-and-ia-32-architectures-sdm-combined-volumes-1-2a-2b-2c-2d-3a-3b-3c-3d-and-4.html).
 
 ### Basics of the x86 Memory Model
+
+The x86 architecture follows a consistency model called Processor Consistency (referred to in the developer manual as Processor Ordering).
 
 ## Final Thoughts
 
