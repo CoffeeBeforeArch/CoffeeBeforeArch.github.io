@@ -323,12 +323,77 @@ If the two reads (one by each thread) of `interested[other]` are reordered befor
 
 Yes! `interested[tid]` and `interested[other]` are two different memory locations, meaning that this write-read pair can be reordered!
 
-Now that we understand where our bug is coming from, we can ask the million dollar question. How do we prevent this re-ordering?
+Now that we understand where our bug is coming from, we can ask the million dollar question. How do we prevent this reordering?
 
 ### Hardware Memory Barriers
 
+To prevent the reordering of memory operations, x86 provides memory barriers in the form of fence instructions that we directly insert using intrinsics. These fences include:
+
+- `_mm_sfence`
+  - _"Perform a serializing operation on all store-to-memory instructions that were issued prior to this instruction. Guarantees that every store instruction that precedes, in program order, is globally visible before any store instruction which follows the fence in program order."_
+- `_mm_lfence`
+  - _"Perform a serializing operation on all load-from-memory instructions that were issued prior to this instruction. Guarantees that every load instruction that precedes, in program order, is globally visible before any load instruction which follows the fence in program order."_
+- `_mm_mfence`
+  - _"Perform a serializing operation on all load-from-memory and store-to-memory instructions that were issued prior to this instruction. Guarantees that every memory access that precedes, in program order, the memory fence instruction is globally visible before any memory instruction which follows the fence in program order."_
+
+Now the question is, which one do we need in our program?
+
+`_mm_sfence` only deals with the the ordering of store instructions, and `_mm_lfence` only deals with the ordering of load instructions, so neither of these (at least on their own) are what we're looking for. However, `_mm_mfence` looks like a perfect fit!
+
+`_mm_mfence` gives us the guarantee that prior stores (like the write to `interested[tid]`) will have become globally visable before and subsequent memory operation (like the read of `interested[other]`). Let's add it between our write of `interested[tid]` and read of `interested[other]`:
+
+```cpp
+  // Method for locking w/ Peterson's algorithm
+  void lock(int tid) {
+    // Mark that this thread wants to enter the critical section
+    interested[tid] = 1;
+
+    // Assume the other thread has priority
+    int other = 1 - tid;
+    turn = other;
+
+    // HW memory barrier
+    _mm_mfence();
+
+    // Wait until the other thread finishes or is not interested
+    while (turn == other && interested[other])
+      ;
+  }
+```
+
+If we recompile and rerun our application a few times we get the following result:
+
+```txt
+FINAL VALUE IS: 200000000
+FINAL VALUE IS: 200000000
+FINAL VALUE IS: 200000000
+```
+
+Finally! The correct answer! Let's take a look at the assembly:
+
+```assembly
+       │18:┌─→movl    $0x1,(%rax)         
+  0.16 │   │  movl    $0x1,0x8(%rax)      
+ 20.13 │   │  mfence                      
+  1.15 │   │↓ jmp     37                  
+       │   │  nop                         
+ 19.13 │30:│  mov     0x4(%rax),%ecx      
+  3.12 │   │  test    %ecx,%ecx           
+       │   │↓ je      3f                  
+  1.55 │37:│  mov     0x8(%rax),%ecx      
+  0.13 │   │  cmp     $0x1,%ecx           
+ 33.72 │   │↑ je      30                  
+ 20.90 │3f:│  incl    (%rsi)              
+  0.01 │   │  movl    $0x0,(%rax)         
+       │   ├──dec     %edx                
+       │   └──jne     18                  
+```
+
+The only major difference is that we have an `mfence` instrcution after our stores to `interested[tid]` and `turn`.
 
 ## Final Thoughts
+
+Memory consistency can be difficult to understand. Even with the relatively strict consistency model of x86 (compared to weaker models used by ARM and POWER), bugs related to hardware memory reordering often go against our intuition, and often require some very careful thought to get around.
 
 Thanks for reading,
 
