@@ -19,7 +19,7 @@ In this blog post, we'll be looking at an example of x86 Store-Load re-ordering 
 
 Hardware memory re-ordering occurs when memory accesses become globally visible in an order different that the accesses are appear in a program's assembly. How a processor is allowed to re-order memory accesses is a function of the processor's memory consistency model. The most intuitive of these models is sequential consistency.
 
-In a sequentially consistent system, each memory access for a thread becomes globally visible in program order. However, memory accesses from different thread may still be interleaved. Consider the following simple pseudo-assembly example where `A` and `B` are both initially `0`:
+In a sequentially consistent system, each memory access for a thread becomes globally visible in program order. However, memory accesses from different threads may still be interleaved. Consider the following simple pseudo-assembly example where `A` and `B` are both initially `0`:
 
 | Thread 1 | Thread 2 |
 |:------------|:------------|
@@ -70,7 +70,7 @@ Consider the follwing interleaving of memory instructions (initially `A == 0` an
 
 In this case, Thread 1 executes its write and read before Thread 2 does either. This leads to the result of `A == 1`, and `B == 0` (the opposite of Case 2).
 
-### Takeaways
+### Takeaways - Sequential Consistency
 
 One thing to notice from our sequential consistency test cases is that the instructions from each thread execute in a sequential order (e.g, Thread 1 always executes `Write A, 1` before `Read B` regardless of how instructions from Thread 2 are interleaved in between). While reasoning about interleavings of instructions across threads can be difficult, we are safe from instructions being reordered within a single thread.
 
@@ -78,18 +78,52 @@ One thing to notice from our sequential consistency test cases is that the instr
 
 Computer architecture is all about tradeoffs. While sequential consistency is simple and intuitive, it places restrictions on execution that limit performance. These restrictions include the following rules about memory reordering:
 
-|   Reordering   | Desciption |
-|:---------------|:------------|
-| Write -> Write | Writes are not reorded with older writes |
-| Write -> Read  | Reads are not reorded with older writes |
-| Read -> Read   | Reads are not reorded with older Reads |
-| Read -> Write  | Writes are not reorded with older Reads |
+|   Reordering   |                Description                 |
+|:---------------|:-------------------------------------------|
+| Write -> Write | Writes are not reordered with older writes |
+| Write -> Read  | Reads are not reordered with older writes  |
+| Read -> Read   | Reads are not reordered with older Reads   |
+| Read -> Write  | Writes are not reordered with older Reads  |
 
 By relaxing these restriction, we can increase performance at the cost of increasing hardware and programming model complexity. In this post, we're going to focus on relaxation in the Intel x86 memory model. This is described in detail in section 8.2 of the [Intel Software Developer Manual](https://software.intel.com/content/www/us/en/develop/download/intel-64-and-ia-32-architectures-sdm-combined-volumes-1-2a-2b-2c-2d-3a-3b-3c-3d-and-4.html).
 
 ### Basics of the x86 Memory Model
 
-The x86 architecture follows a consistency model called Processor Consistency (referred to in the developer manual as Processor Ordering).
+The x86 architecture follows a consistency model called Processor Consistency (referred to in the developer manual as Processor Ordering). This model is very similar to sequential consistency, but with the following exception:
+
+- _"Reads and writes always appear in programmed order at
+the system bus—except for the following situation where processor ordering is exhibited. Read misses are permitted to go ahead of buffered writes on the system bus when all the buffered writes are cache hits and, therefore, are not directed to the same address being accessed by the read miss."_
+
+Processor consistency relaxes our Write -> Read ordering constraint, allowing writes to be reordered with subsequent reads. This introduces a fourth possible scenario for interleaved interleaved instructions for our two threads.
+
+### Case 4: A = 0, B = 0
+
+Consider the follwing interleaving of memory instructions (initially `A == 0` and `B == 0`):
+
+| Instruction | Issuing Thread | A, B |
+|:------------|:---------------|:-----|
+|`Read A`     |    Thread 2    | 0, 0 |
+|`Read B`     |    Thread 1    | 0, 0 |
+|`Write A, 1` |    Thread 1    | 1, 0 |
+|`Write B, 1` |    Thread 2    | 1, 1 |
+
+In this case, Thread 1 and Thread 2 both perform their reads before performing their writes. This leads to the result of `A == 1`, and `B == 0` (the opposite of Case 2). The same order could be achieved by swapping the order of reads, or swapping the order of writes.
+
+### Takeaways - Processor Consistency
+
+Processor consistency allows for instructions to be reordered within a single thread (e.g., Thread 1's read of `B` can complete before its write to `A`). It's easy to see how this complicates the programming model, making things less intuitive to programmers.
+
+Even if a programmer orders operations correctly in their high-level language (e.g., C++), and ensures the operations are ordered correctly in the compiler-generated assembly, the hardware may still reorder a read with an older write.
+
+Jeff Preshing's blog post [Memory Reodering Caught in the Act](https://preshing.com/20120515/memory-reordering-caught-in-the-act/) is a great read that includes a short benchmark to shows this exact example of hardware Write -> Read reordering.
+
+You can find my C++ re-implementation of the benchmark [here](https://github.com/CoffeeBeforeArch/misc_code/blob/master/hw_barrier/hw_barrier.cpp). This can be compiled with:
+
+```bash
+g++ hw_barrier.cpp -o hw_barrier -O2 -lpthread
+```
+
+## Peterson's Algorithm for Mutual Exclusion
 
 ## Final Thoughts
 
