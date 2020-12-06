@@ -39,7 +39,7 @@ Consider the follwing interleaving of memory instructions (initially `A = 0` and
 |`Read B`     |    Thread 1    | 1, 1 |
 |`Read A`     |    Thread 2    | 1, 1 |
 
-In this case, the writes to `A` and `B` occur before the reads of `A` and `B`. This leads to the result of `A == 1` and `B == 1` as the final result.
+In this case, the writes to `A` and `B` occur before the reads of `A` and `B`. This leads to the result of `A = 1` and `B = 1`.
 
 This same result could be achieved if the order of the writes is reversed, or the order of reads is reversed.
 
@@ -55,7 +55,7 @@ Consider the follwing interleaving of memory instructions (initially `A = 0` and
 |`Read B`     |    Thread 1    | 1, 1 |
 
 
-In this case, Thread 2 executes its write and read before Thread 1 does either. This leads to the result of `A == 0`, and `B == 1`
+In this case, Thread 2 executes its write and read before Thread 1 does either. This leads to the result of `A = 0`, and `B = 1`.
 
 ### Case 3: A = 1, B = 0
 
@@ -68,7 +68,7 @@ Consider the follwing interleaving of memory instructions (initially `A = 0` and
 |`Write B, 1` |    Thread 2    | 1, 1 |
 |`Read A`     |    Thread 2    | 1, 1 |
 
-In this case, Thread 1 executes its write and read before Thread 2 does either. This leads to the result of `A == 1`, and `B == 0` (the opposite of Case 2).
+In this case, Thread 1 executes its write and read before Thread 2 does either. This leads to the result of `A = 1`, and `B = 0` (the opposite of Case 2).
 
 ### Takeaways - Sequential Consistency
 
@@ -109,7 +109,7 @@ Consider the follwing interleaving of memory instructions (initially `A = 0` and
 |`Write A, 1` |    Thread 1    | 1, 0 |
 |`Write B, 1` |    Thread 2    | 1, 1 |
 
-In this case, Thread 1 and Thread 2 both perform their reads before performing their writes. This leads to the result of `A == 1`, and `B == 0` (the opposite of Case 2). The same order could be achieved by swapping the order of reads, or swapping the order of writes.
+In this case, Thread 1 and Thread 2 both perform their reads before performing their writes. This leads to the result of `A = 1`, and `B = 0` (the opposite of Case 2). The same order could be achieved by swapping the order of reads, or swapping the order of writes.
 
 ### Takeaways - Processor Consistency
 
