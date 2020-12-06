@@ -5,7 +5,7 @@ title: Hardware Memory Reordering
 
 # Hardware Memory Reordering
 
-Even if we use software memory barriers to prevent compilers from reordering memory accesses in our generated assembly, they still might be reordered by the hardware during execution. How these accesses can be be reordered is a function of the processor's memory consistency model.
+Even if we use software memory barriers to prevent the compiler from reordering memory accesses in our generated assembly, they still might be reordered by the hardware itself during execution. How these accesses can be be reordered is a function of the processor's memory consistency model.
 
 In this blog post, we'll be looking at an example of x86 Store-Load reordering in an implementation of Peterson's algorithm, and how we can prevent it using hardware barriers.
 
@@ -17,20 +17,20 @@ In this blog post, we'll be looking at an example of x86 Store-Load reordering i
 
 ## Background on Sequential Consistency
 
-Hardware memory reordering occurs when memory accesses become globally visible in an order different that the accesses are appear in a program's assembly. How a processor is allowed to reorder memory accesses is a function of the processor's memory consistency model. The most intuitive of these models is sequential consistency.
+Hardware memory reordering occurs when memory accesses become globally visible in an order different than the accesses appear in the program's assembly. How a processor is allowed to reorder memory accesses is a function of the processor's memory consistency model. The most intuitive of these models is sequential consistency.
 
-In a sequentially consistent system, each memory access for a thread becomes globally visible in program order. However, memory accesses from different threads may still be interleaved. Consider the following simple pseudo-assembly example where `A` and `B` are both initially `0`:
+In a sequentially consistent system, each memory access for a thread becomes globally visible in program order. However, memory accesses from different threads may still be interleaved in a global total order. Consider the following simple pseudo-assembly example where `A` and `B` are both initially `0`:
 
 | Thread 1 | Thread 2 |
 |:------------|:------------|
 |`Write A, 1` |`Write B, 1` |
 |`Read B`     |`Read A`     |
 
-In a sequentially consistent system, what combinations of values are possible for `A` and `B`? There are three possible scenarios. Let's take a look at the globally visable order of instructions for each.
+In a sequentially consistent system, what combinations of values are possible for `A` and `B`? There are three unique scenarios to consider. Let's take a look at the globally visable order of instructions for each.
 
 ### Case 1: A = 1, B = 1
 
-Consider the follwing interleaving of memory instructions (initially `A == 0` and `B == 0`):
+Consider the follwing interleaving of memory instructions (initially `A = 0` and `B = 0`):
 
 | Instruction | Issuing Thread | A, B |
 |:------------|:---------------|:-----|
@@ -45,7 +45,7 @@ This same result could be achieved if the order of the writes is reversed, or th
 
 ### Case 2: A = 0, B = 1
 
-Consider the follwing interleaving of memory instructions (initially `A == 0` and `B == 0`):
+Consider the follwing interleaving of memory instructions (initially `A = 0` and `B = 0`):
 
 | Instruction | Issuing Thread | A, B |
 |:------------|:---------------|:-----|
@@ -59,7 +59,7 @@ In this case, Thread 2 executes its write and read before Thread 1 does either. 
 
 ### Case 3: A = 1, B = 0
 
-Consider the follwing interleaving of memory instructions (initially `A == 0` and `B == 0`):
+Consider the follwing interleaving of memory instructions (initially `A = 0` and `B = 0`):
 
 | Instruction | Issuing Thread | A, B |
 |:------------|:---------------|:-----|
@@ -72,7 +72,9 @@ In this case, Thread 1 executes its write and read before Thread 2 does either. 
 
 ### Takeaways - Sequential Consistency
 
-One thing to notice from our sequential consistency test cases is that the instructions from each thread execute in a sequential order (e.g, Thread 1 always executes `Write A, 1` before `Read B` regardless of how instructions from Thread 2 are interleaved in between). While reasoning about interleavings of instructions across threads can be difficult, we are safe from instructions being reordered within a single thread.
+One thing to notice from our sequential consistency test cases is that the instructions from each thread always become visable in sequential order (e.g, Thread 1 always executes `Write A, 1` before `Read B` regardless of how instructions from Thread 2 are interleaved in between).
+
+While reasoning about interleavings of instructions across threads can be difficult, reasoning about activity within a single thread is simple.
 
 ## Relaxed Memory Consistency Models (x86)
 
@@ -89,7 +91,7 @@ By relaxing these restriction, we can increase performance at the cost of increa
 
 ### Basics of the x86 Memory Model
 
-The x86 architecture follows a consistency model called Processor Consistency (referred to in the developer manual as Processor Ordering). This model is very similar to sequential consistency, but with the following exception:
+The x86 architecture follows a consistency model called Processor Consistency (referred to in the developer manual as Processor Ordering). This model is very similar to sequential consistency, but with the following (major) exception:
 
 - _"Reads and writes always appear in programmed order at
 the system bus—except for the following situation where processor ordering is exhibited. Read misses are permitted to go ahead of buffered writes on the system bus when all the buffered writes are cache hits and, therefore, are not directed to the same address being accessed by the read miss."_
@@ -111,9 +113,9 @@ In this case, Thread 1 and Thread 2 both perform their reads before performing t
 
 ### Takeaways - Processor Consistency
 
-Processor consistency allows for instructions to be reordered within a single thread (e.g., Thread 1's read of `B` can complete before its write to `A`). It's easy to see how this complicates the programming model, making things less intuitive to programmers.
+Processor consistency allows for instructions to be reordered within a single thread (e.g., Thread 1's read of `B` can complete before its write to `A`). It's easy to see how this complicates the programming model, and makes things less intuitive for programmers.
 
-Even if a programmer orders operations correctly in their high-level language (e.g., C++), and ensures the operations are ordered correctly in the compiler-generated assembly, the hardware may still reorder a read with an older write.
+Even if a programmer orders operations correctly in their high-level language (e.g., C++) and ensures the operations are ordered correctly in the compiler-generated assembly, the hardware may still reorder a read with an older write.
 
 Jeff Preshing's blog post [Memory Reodering Caught in the Act](https://preshing.com/20120515/memory-reordering-caught-in-the-act/) is a great read that includes a short benchmark to shows this exact example of hardware Write -> Read reordering.
 
@@ -133,7 +135,7 @@ We'll start by looking at:
 - How a thread gets access to a critical section
 - How a thread notifies it's done with a critical section
 
-After this we'll run a short benchmark to show how memory reordering fundamentally breaks this implementation, and how we can fix this with a dedicated memory barrier instruction.
+After this, we'll run a short benchmark to show how x86 memory reordering introduces a bug in our direct implementation of the algorithm, and how we can fix this with a dedicated memory barrier instruction.
 
 You can find the full benchmark [here](https://github.com/CoffeeBeforeArch/misc_code/blob/master/hw_barrier/peterson.cpp).
 
@@ -158,7 +160,7 @@ class Peterson {
 };
 ```
 
-Note, we have both our variables marked as `volatile` to keep them from being cached in registers (we need access of these variables to be in memory so that they are visable to both threads).
+Note, we have both our variables marked as `volatile` to keep them from being cached in registers (we need the access of these variables to be in memory so that they are visible to both threads).
 
 ### Gaining Access to the Critical Section
 
@@ -184,7 +186,7 @@ The first thing the calling thread does is index into our `interested` array usi
 
 Next, the thread yields priority to the other thread by setting `turn` equal to the other thread's ID.
 
-Finally the thread enters a `while` loop waiting for either the other thread to yield priority, or to no longer be interested in entering the critical section.
+Finally the thread enters a `while` loop, waiting for either the other thread to yield priority, or to no longer be interested in entering the critical section.
 
 ### Exiting the Critical Section
 
@@ -198,7 +200,7 @@ The final thing we need is a method to notify that a thread is done with the cri
   }
 ```
 
-Notifying that a thread is done with the critical section is simple. The exiting thread just needs to say it is no longer interested in the critical section by writing `0` to its state in `interested`
+Notifying that a thread is done with the critical section is simple. The exiting thread just needs to say it is no longer interested in the critical section by writing `0` to `interested[tid]`
 
 ### Our Benchmark
 
@@ -220,7 +222,7 @@ void work(Peterson &p, int &val, int tid) {
 
 Here, we're using Peterson's algorithm to protect the increment of our shared value `val`.
 
-The `main` function that drives our benchmark is incredibly simple:
+The `main` function that drives our benchmark is simple:
 
 ```cpp
 int main() {
@@ -243,7 +245,7 @@ int main() {
 }
 ```
 
-Here, we create our shared value `val` and `Peterson` object, spawn two threads (with thread IDs `0` and `1` respectively), wait for them to finish running the `work` function, then print out the final result value of `val`.
+We create our shared value `val` and `Peterson` object, spawn two threads (with thread IDs `0` and `1` respectively), wait for them to finish running the `work` function, then print out the final result.
 
 ### Compiling and Running the Benchmark
 
@@ -253,7 +255,7 @@ We can compile our benchmark `peterson.cpp` using the following command:
 g++ peterson.cpp -o peterson -O2 -lpthread
 ```
 
-What we'd expect to be printed at the end of execution (if our implementation of Peterson's algorithm gives us mutual exclusion) is 2 million (from 1 million increments performed by each thread). If our implementation does not give us mutual exclusion, the final value of `val` may be less than 2 million because of overlapping increments from our two threads.
+What we'd expect to be printed at the end of execution (if our implementation of Peterson's algorithm gives us mutual exclusion) is 2 million (from 1 million increments performed by each thread). If our implementation does not give us mutual exclusion, the final value may be less than 2 million because of overlapping increments from our two threads.
 
 Here are the results from a few runs of the benchmark:
 
@@ -291,7 +293,7 @@ Next, our threads wait inside of the `while` loop starting at label `30:`, where
 
 If one of these conditions becomes false, a thread does the increment of the shared value (`incl`), stores `0` to say it is no longer intersted in the critical section, and continues executing the `for` loop in our `work` function.
 
-Since the ordering of these instructions make sense in our binary, something must be getting reordered in hardware. Let's think about where that could be happening in our high-level C++. As a reminder, here's our `lock` method:
+Since the ordering of these instructions make sense, something must be getting reordered in hardware! Let's think about where that could be happening in our high-level C++. As a reminder, here's our `lock` method:
 
 ```cpp
   // Method for locking w/ Peterson's algorithm
@@ -309,7 +311,7 @@ Since the ordering of these instructions make sense in our binary, something mus
   }
 ```
 
-We know that Processor Consistency says writes may be reordered with subsequent reads, so we will focus on those relationships in our program. Specifically, we will focus on the conditions being checked in our `while` loop because that is where our threads wait for permission to enter the critical section.
+We know that Processor Consistency says writes may be reordered with subsequent reads, so we will focus on those relationships. Specifically, we will focus on the conditions being checked in our `while` loop because that is where our threads wait for permission to enter the critical section.
 
 First, let's consider `turn`. Each thread yields priority by setting `turn = other`, then waiting on `turn == other` in the `while` loop. If the read of `turn` for the comparison is reordered before the write, the thread could break out of the `while` loop and exist the critical section. Is this possible?
 
@@ -317,11 +319,11 @@ No! This write and read can not be reordered because they are the same location!
 
 - _"Reads may be reordered with older writes to different locations but not with older writes to the same location."_
 
-Let's now consider the write-read pair of `interested[tid]` and `interested[other]`. Our thread first says it's interested in entering the critical section by writing to `1` to `interested[tid]`. In the `while` loop, it then waits for the other thread to no longer be interested in the critical section by evaluating `interested[other] == 1`.
+Let's consider the write-read pair of `interested[tid]` and `interested[other]`. Our thread first says it's interested in entering the critical section by writing to `1` to `interested[tid]`. In the `while` loop, it then waits for the other thread to no longer be interested in the critical section by evaluating `interested[other] == 1`.
 
 If the two reads (one by each thread) of `interested[other]` are reordered before the two writes (one by each thread) to `interested[tid]`, each thread would think that the other is not interested in the critical section, break out of the `while` loop, and enter the critical section. Is this possible?
 
-Yes! `interested[tid]` and `interested[other]` are two different memory locations, meaning that this write-read pair can be reordered!
+Yes! `interested[tid]` and `interested[other]` are two different memory locations, meaning that this write-read pair can be reordered by hardware!
 
 Now that we understand where our bug is coming from, we can ask the million dollar question. How do we prevent this reordering?
 
@@ -389,7 +391,7 @@ Finally! The correct answer! Let's take a look at the assembly:
        │   └──jne     18                  
 ```
 
-The only major difference is that we have an `mfence` instrcution after our stores to `interested[tid]` and `turn`.
+The only major difference is that we have an `mfence` instruction after our stores to `interested[tid]` and `turn`.
 
 ## Does Hardware Reodering Require OoO Execution?
 
@@ -399,18 +401,18 @@ It's natural to think that hardware memory reordering requires out-of-order (OoO
 
 In the Memory Subsystem, you can see a block labeled "Store Buffer & Forwarding". A store buffer is there to do exactly what it sounds like: buffer stores. Unlike loads, stores are not typically on the critical path (instructions often stall waiting on data to be loaded, not on data being written). Instead of making stores immediately visible, they can first be buffered in a store buffer, and written back gradually as bandwidth becomes available.
 
-In an in-order processor, a thread could first perform a store that goes into the store buffer. At this point, the store is the memory subsystem's problem (to the core, that operation is complete). The thread could then issue a read which completes before the previous store has drained out of the store buffer! No OoO execution required!
+In an in-order processor, a thread could first perform a store that goes into the store buffer. At this point, the store is the memory subsystem's problem (to the core, that operation is complete). The thread could then issue a read which completes before the previous store has drained out of the store buffer (and become globally visible)! No OoO execution required!
 
 ## How Do Fence Instruction Work?
 
-It's natural to be inquisitve about how the the x86 instructions work at the hardware level. Below are some quick thoughts on how they could work:
+It's natural to be inquisitve about how the the x86 instructions work at the hardware level. Below are some quick thoughts on how they could function:
 
 - `_mm_sfence`
-  - To ensure all previous stores have become globally visible, the hardware could stall all later stores (in program order), until all earlier stores have retired and the store buffer has been drained, before the `sfence` instruction itself retires.
+  - To ensure all previous stores have become globally visible, the hardware could stall all later stores (in program order), until all earlier stores have retired and the store buffer have drained, before the `sfence` instruction itself retires.
 - `_mm_lfence`
   - Similar to the `_mm_sfence`, the architecture could stall later loads (in program order), until all earlier loads have completed, before the `lfence` instruction itself retires.
 - `_mm_mfence`
-  - Naturally, the `mfence` instruction is a combination of the previous two. The architecture could stall all later loads and stores (in program order) until all ealier loads and stores have retired and the store buffer has been drained, before the `mfence` instruction itself retuires.
+  - Naturally, the `mfence` instruction is a combination of the previous two. The architecture could stall all later loads and stores (in program order) until all ealier loads and stores have retired and the store buffer has been drained, before the `mfence` instruction itself retires.
 
 There are of course exceptions and nuances not covered by these descriptions, but I'll leave the [patent reading](https://www.freepatentsonline.com/8959314.html) as an exercise for the reader.
 
