@@ -100,7 +100,7 @@ Processor consistency relaxes our Write -> Read ordering constraint, allowing wr
 
 ### Case 4: A = 0, B = 0
 
-Consider the follwing interleaving of memory instructions (initially `A == 0` and `B == 0`):
+Consider the follwing interleaving of memory instructions (initially `A = 0` and `B = 0`):
 
 | Instruction | Issuing Thread | A, B |
 |:------------|:---------------|:-----|
