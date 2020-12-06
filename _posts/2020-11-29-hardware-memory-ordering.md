@@ -26,7 +26,7 @@ In a sequentially consistent system, each memory access for a thread becomes glo
 |`Write A, 1` |`Write B, 1` |
 |`Read B`     |`Read A`     |
 
-In a sequentially consistent system, what combinations of values are possible for `A` and `B`? There are three unique scenarios to consider. Let's take a look at the globally visable order of instructions for each.
+In a sequentially consistent system, what combinations of values are possible for `A` and `B`? There are three unique scenarios to consider. Let's take a look at the globally visible order of instructions for each.
 
 ### Case 1: A = 1, B = 1
 
@@ -72,7 +72,7 @@ In this case, Thread 1 executes its write and read before Thread 2 does either. 
 
 ### Takeaways - Sequential Consistency
 
-One thing to notice from our sequential consistency test cases is that the instructions from each thread always become visable in sequential order (e.g, Thread 1 always executes `Write A, 1` before `Read B` regardless of how instructions from Thread 2 are interleaved in between).
+One thing to notice from our sequential consistency test cases is that the instructions from each thread always become visible in sequential order (e.g, Thread 1 always executes `Write A, 1` before `Read B` regardless of how instructions from Thread 2 are interleaved in between).
 
 While reasoning about interleavings of instructions across threads can be difficult, reasoning about activity within a single thread is simple.
 
@@ -342,7 +342,7 @@ Now the question is, which one do we need in our program?
 
 `_mm_sfence` only deals with the the ordering of store instructions, and `_mm_lfence` only deals with the ordering of load instructions, so neither of these (at least on their own) are what we're looking for. However, `_mm_mfence` looks like a perfect fit!
 
-`_mm_mfence` gives us the guarantee that prior stores (like the write to `interested[tid]`) will have become globally visable before and subsequent memory operation (like the read of `interested[other]`). Let's add it between our write of `interested[tid]` and read of `interested[other]`:
+`_mm_mfence` gives us the guarantee that prior stores (like the write to `interested[tid]`) will have become globally visible before and subsequent memory operation (like the read of `interested[other]`). Let's add it between our write of `interested[tid]` and read of `interested[other]`:
 
 ```cpp
   // Method for locking w/ Peterson's algorithm
