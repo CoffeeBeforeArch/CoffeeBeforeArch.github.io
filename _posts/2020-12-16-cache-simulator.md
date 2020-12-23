@@ -3,13 +3,13 @@ layout: default
 title: Writing a Trace-Based Cache Simulator
 ---
 
-# Writing a Trace-Based Cache Simulator
+# Writing a Trace - Based Cache Simulator
 
 Computer architects use many tools to evaluate proposed architectures. They may use coarse-grained analytical models to quickly rule out sub-optimal designs, or complex RTL simulation to get an accurate view of how the real hardware will behave. Another common tool that provides a compromise on speed in accuarcy between these is micro-architecture simulators.
 
 Microarchitecture simulators can provide researchers with a decently accurate view of how hardware will behave in a reasonable amount of time, and are used extensively in both research and industry. This makes them a great thing to get familiar with if you are interested in hardware and architecture.
 
-In this blog post we'll be looking at how to write a trace-based cache simulator. This should provide a (relatively) simple entry points for those interested in simulator design.
+In this blog post we'll be looking at how to write a trace-based cache simulator. This should provide a (relatively) simple entry points for those interested in simulator design. We will then close with a discussion on simulator performance.
 
 ### Link to the source code
 
@@ -28,6 +28,14 @@ Our simulator must fundamentally do three things:
 1. Read+Parse instructions from a trace of memory accesses
 2. Process the cache accesses
 3. Record statistics about what happened
+
+In the following sections, we will describe these steps in great detail.
+
+## Reading and Parsing Memory Accesses
+
+## Processing Cache Accesses
+
+## Recording Statistics
 
 ## Final Thoughts
 
