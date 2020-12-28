@@ -29,9 +29,61 @@ Our simulator must fundamentally do three things:
 2. Process the cache accesses
 3. Record statistics about what happened
 
-In the following sections, we will describe these steps in great detail.
+In the following sections, we will how to implement this functionality in greater detail as we implement methods and add data members to our `CacheSim` class:
+
+```cpp
+// Our cache simulator
+class CacheSim {
+ public:
+ private:
+};
+```
 
 ## Reading and Parsing Memory Accesses
+
+The first step in building a cache simulator is building the infrastructure to read/parse the parse the instructions. We'll start by looking at the format of the instruction trace we'll be processing, then look at the code we'll use to parse the instructions.
+
+### Format of the Instruction Trace
+
+The instruction traces my simulator is based on are from [this course assignment](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html). Each line of the trace files looks like the following:
+
+```txt
+# 0 7fffed80 1
+```
+
+Following the `#` we have the type of memory access (`0` for read, and `1` for write), the address of the piece of memory being accessed, and then the number of instructions executed between the previous memory access and this one.
+
+### Reading and Parsing the Trace Files
+
+Before we can extract the access type, address, and instruction count, we need to first read the line from the file. We'll implement the opening and closing of our trace file in the constructor and destructor of our `CacheSim` class. This follows the RAII (resource acquisition is initialization) programming technique which binds the life cycle of a resource (our trace file) to the lifetime of an object (our `CacheSim` object).
+
+The actual resource our constructor and destructor will open and close is a `std::ifstream` object. We will add this as a data member of our class and name it `infile`:
+
+```cpp
+// Input trace file
+std::ifstream infile;
+```
+
+This is what we will use to open/close our trace file, and read the trace file line-by-line.
+
+We will additionally add a constructor to our `CacheSim` class that takes a `std::string` that contains the location of the trace file to open. We will additionally open the file in the constructor:
+
+```cpp
+// Constructor
+CacheSim(std::string input) {
+  // Initialize of input file stream object
+  infile.open(input);
+}
+```
+
+We will also add a destructor to our classes that closes the file:
+
+```cpp
+// Destructor
+~CacheSim() {
+  infile.close();
+}
+```
 
 ## Processing Cache Accesses
 
