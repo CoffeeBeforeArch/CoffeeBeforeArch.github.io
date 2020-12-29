@@ -253,7 +253,7 @@ The final thing we need to initialize are the offsets and mask to extract the se
 
 The first thing we'll calculate is the `set_offset`, which is the number of bits we need to shift over over to extract the set number (Z-Bits from our diagram). Assuming byte-addressable memory and a cache block size of 16-bytes, the number of bits (Z-Bits) would be 4. This is because 16 bytes (for a cache line) can be indexed using only 4 bits (using values `0b0000` to `0b1111`).
 
-The fundamental calculation we need is log base 2 of the cache block size (e.g. log base 2 of 16 is 4). A simple way to calculate this is by subtracting 1 from the block size then using `std::popcount` to count the number of set bits. Consider the following example where the block size is 16 bytes:
+The fundamental calculation we need is log base 2 of the cache block size (e.g. log base 2 of 16 is 4). A simple way to calculate this is by subtracting 1 from the block size then using `std::popcount` to count the number of set bits. Consider the following example where the `block_size` is 16 bytes:
 
 ```txt
 block_size           = 16 = 0b00010000
@@ -261,7 +261,45 @@ block_size - 1       = 15 = 0b00001111
 popcount(0b00001111) = 4
 ```
 
+In C++, we can do this as follows:
+
+```cpp
+auto set_offset = std::popcount(block_size - 1);
+```
+
 This calculation is reliant on the `block_size` being a power-of-2. For all practical intents and purposes, this will always be the case.
+
+We next thing we need to do calculate is our `set_mask`. This will be a mask of 1s equal to the number of set bits (Y-Bits from our diagram) in our memory address. We can calculate the number of sets with the following:
+
+```cpp
+auto sets = capacity / (block_size * associativity);
+```
+
+The size of each set is the equal to the associativity multiplied by the block size. We can therefore figure out the total number of sets buy dividing the total capacity of the cache by the size of each set.
+
+To create a mask of ones equal to the number of set bits (Y-bits from our diagram), we can simply subtract 1 from the the number of sets. Consider the following example where the number sets is 16:
+
+```txt
+sets           = 16 = 0b00010000
+sets - 1       = 15 = 0b00001111
+```
+
+Because the number of sets will be a power-of-2 for all practical intents and purposes, subtracting one from than number will give us a mask of ones equal to the number of set bits (for the same reasoning as with the `set_offset` calculation).
+
+```cpp
+set_mask = sets - 1;
+```
+
+The final thing we need to calculate is the `tag_offset` (the number of bits to shift the address over to extract the tag). This will simply be the `set_offset` plus the number number of set bits. We can calculate this as follows:
+
+```cpp
+auto set_bits = std::popcount(set_mask);
+tag_offset = set_offset + set_bits;
+```
+
+We do not need a mask to extract the tag bits because all the upper-bits of the address shifted by `tag_offset` will be zeros.
+
+### Accessing the Cache
 
 ## Recording Statistics
 
