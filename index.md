@@ -47,6 +47,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Hardware Memory Re-Ordering]({% post_url 2020-11-29-hardware-memory-ordering %})
 
+- [Building a Trace-Based Cache Simulator]({% post_url 2020-12-16-cache-simulator %})
+
 ## Spinlocks
 
 - [Spinlocks - Part 1 - A Basic Spinlock]({% post_url 2020-11-07-spinlocks-1 %})

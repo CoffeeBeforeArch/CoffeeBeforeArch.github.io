@@ -3,25 +3,26 @@ layout: default
 title: Writing a Trace-Based Cache Simulator
 ---
 
-# Writing a Trace - Based Cache Simulator
+# Writing a Trace-Based Cache Simulator
 
-Computer architects use many tools to evaluate proposed architectures. They may use coarse-grained analytical models to quickly rule out sub-optimal designs, or complex RTL simulation to get an accurate view of how the real hardware will behave. Another common tool that provides a compromise on speed in accuarcy between these is micro-architecture simulators.
+Computer architects use many tools to evaluate proposed architectures. They may use coarse-grained analytical models to quickly rule out sub-optimal designs, or complex RTL simulation to get an accurate view of how the real hardware will behave. Another common tool that provides a compromise on speed in accuarcy between these are micro-architecture simulators.
 
 Microarchitecture simulators can provide researchers with a decently accurate view of how hardware will behave in a reasonable amount of time, and are used extensively in both research and industry. This makes them a great thing to get familiar with if you are interested in hardware and architecture.
 
-In this blog post we'll be looking at how to write a trace-based cache simulator. This should provide a (relatively) simple entry points for those interested in simulator design. We will then close with a discussion on simulator performance.
+In this blog post we'll be looking at how to write a trace-based cache simulator based on the course assignment I found here [here](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html). This should provide a (relatively) simple entry point for those interested in simulator design and implementation, and give you ideas on how you could design your own,independent of things like the specific trace format we use in this blog post.
 
 ### Link to the source code
 
 - [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
 - [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
+- [The Cache Simulator: ](https://github.com/CoffeeBeforeArch/simple_cache_sim)
 - My Email: CoffeeBeforeArch@gmail.com
 
 ## Trace-Based Simulator Basics
 
 Before we dig into the code, we should discuss what we are actually trying to design, starting with what "trace-based" simulation means.
 
-Simulators often come in two flavors: trace-based and execution-driven. Execution-driven simulators drive simulation by directly executing a program's instructions. Conversely, trace-driven simulators drive simulation by reading/parsing a pre-recorded trace of instructions. For our simple cache simulator, we will be using a trace-based design.
+Simulators often come in two flavors: trace-based and execution-driven. Execution-driven simulators drive simulation by directly executing a program's instructions. Conversely, trace-driven simulators drive simulation by reading/parsing a pre-recorded trace of instructions and results. For our simple cache simulator, we will be using a trace-based design.
 
 Our simulator must fundamentally do three things:
 
@@ -41,17 +42,17 @@ class CacheSim {
 
 ## Reading and Parsing Memory Accesses
 
-The first step in building a cache simulator is building the infrastructure to read/parse the parse the instructions. We'll start by looking at the format of the instruction trace we'll be processing, then look at the code we'll use to parse the instructions.
+The first step in building a cache simulator is building the infrastructure to read/parse the instructions. We'll start by looking at the format of the instruction trace, then at the code that will read/parse the instructions.
 
 ### Format of the Instruction Trace
 
-The instruction traces my simulator is based on are from [this course assignment](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html). Each line of the trace files looks like the following:
+The instruction traces for this simulator are from [this course assignment](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html). Each line of the trace files looks like the following:
 
 ```txt
 # 0 7fffed80 1
 ```
 
-Following the `#` we have the type of memory access (`0` for read, and `1` for write), the address of the piece of memory being accessed, and then the number of instructions executed between the previous memory access and this one.
+Following the `#` we have the type of memory access (`0` for read, and `1` for write), the address of the piece of memory being accessed, and then the number of instructions executed between the previous memory access and this one (for a cache simulator, we don't care about the details of instructions that are not memory accesses).
 
 ### Opening and Closing the Trace File
 
@@ -64,7 +65,7 @@ std::ifstream infile;
 
 The first thing we need to set up for our `std::ifstream` object is opening and closing the file. We'll follow the programming technique RAII (resource acquisition is initialization) for this, which binds the life cycle of a resource (the file we'll be opening) to the lifetime of the object (our `CacheSim` object).
 
-Specifically, we will be opening the file in the constructor of our `CacheSim` object, and closing it in the destructor. We'll start with our constructor which will take a single `std::string` (the path to the trace file to open). Inside the constructor we will call the `open` method for our `ifstream` object:
+Specifically, we will be opening the file in the constructor of our `CacheSim`, and closing it in the destructor. We'll start with our constructor which will take a single `std::string` (the path to the trace file to open). Inside the constructor, we will call the `open` method for our `ifstream` object:
 
 ```cpp
 // Constructor
@@ -74,7 +75,7 @@ CacheSim(std::string input) {
 }
 ```
 
-Next we will add the destructor which closes the file using the `close` method:
+Next, we have the destructor which closes the file using the `close` method:
 
 ```cpp
 // Destructor
@@ -89,7 +90,7 @@ Now that we've set up the opening and closing of our trace file, we can focus on
 
 For this, we'll be implementing two methods:
 
-1. `run` - A method that will keep reading until we run out of lines in the trace
+1. `run` - A method that will keep reading until we reach the end of the trace
 2. `parse_line` - A method for extracting the access type, address, and instruction count from a line from the trace file
 
 We can implement the `run` method as follows:
@@ -105,7 +106,7 @@ void run() {
 }
 ```
 
-Each iteration of the `while` loop, we read a new line from the trace file into our `std::string` named `line` using `std::getline`. When we hit the end of the file, we break out of the loop.
+Each iteration of the `while` loop, we read a new line from the trace file into our `std::string` named `line` using `std::getline`. When we reach the end of the file, we break out of the loop.
 
 The next thing we will add is a helper method to extract the data stored in `line`. We'll implement that in our `parse_line` method:
 
@@ -124,9 +125,9 @@ std::tuple<bool, std::uint64_t, int> parse_line(std::string access) {
 }
 ```
 
-To our method we'll pass the `std::string` containing our memory access. We'll then create 3 temporary variables (`type`, `address`, and `instructions`) for the three values we want to extract from our string.
+We will pass a `std::string` containing the line from our trace file to the method. We'll then create 3 temporary variables (`type`, `address`, and `instructions`) for the three values we want to extract from our string.
 
-Next, we'll use `sscanf` to extract the three values into our temporary variables.
+Next, we'll use `sscanf` to extract the values in the string into our temporary variables.
 
 Finally, we'll return all three variables using a `std::tuple`.
 
@@ -144,7 +145,7 @@ void run() {
 }
 ```
 
-We can even use structured bindings (C++17) to unpack our the three values in our `std::tuple` directly (as seen above) instead of using something like `std::tie` or `std::get`. 
+We can even use structured bindings (C++17) to unpack our the three values in the returned `std::tuple` directly (as seen above) instead of using something like `std::tie` or `std::get`. 
 
 ### End of Section Thoughts
 
@@ -171,7 +172,7 @@ unsigned miss_penalty;
 unsigned dirty_wb_penalty;
 ```
 
-The next thing we'll add to our cache are some offsets and masks that we'll use when extracting the set number and tag from a memory address:
+The next thing we'll add to our cache are some offsets and masks that we'll use for extracting the set number and tag from a memory address:
 
 ```cpp
 // Access settings
@@ -194,7 +195,7 @@ For each cache block, we'll store the tag at the location, if the cache block is
 
 ### Setting Up the Cache
 
-Now that we have the data members in our `CacheSim` class, we need to initialize them. This is something we can do in our class' constructor.
+Now that we have the data members in our `CacheSim` class, we need to initialize them. This is something we can do in the constructor.
 
 We'll start by expanding our constructor to also take the configuration options (block size, associativity, capacity, miss-penalty, and dirty writeback penalty) as parameters.
 
@@ -216,13 +217,6 @@ CacheSim(std::string input, unsigned bs, unsigned a, unsigned c, unsigned mp,
 The next thing we need to do is resize our vectors based on the number of cache blocks for which we want to maintain state. This will simply be the capacity of our cache divided by the cache block size:
 
 ```cpp
-// Set all of our cache settings
-block_size = bs;
-associativity = a;
-capacity = c;
-miss_penalty = mp;
-dirty_wb_penalty = wbp;
-
 // Calculate the number of blocks
 // Assume this divides evenly
 auto num_blocks = capacity / block_size;
@@ -232,21 +226,20 @@ tags.resize(num_blocks);
 dirty.resize(num_blocks);
 valid.resize(num_blocks);
 priority.resize(num_blocks);
-}
 ```
 
-Note, we don't actually need to worry about the shape of our cache with sizing the vectors. This is because the shape of our cache will only affect the traversal of the vectors, not the number of total elements (which will always be equal to the number of cache blocks).
+Note, we don't actually need to worry about the shape of our cache when sizing the vectors. This is because the shape of our cache will only affect the traversal of the vectors, not the number of total elements (which will always be equal to the number of cache blocks). Furthermore, resizing the vectors as show will initialize all the values to 0. Therefore, all of our cache blocks will initially be invalid.
 
-The final thing we need to initialize are the offsets and mask to extract the set number and tag from a memory address. We'll be using the following memory address format as a basis for these offsets and masks.
+The final thing we need to initialize are the offsets and mask used to extract the set number and tag from a memory address. We'll be using the following memory address format as a basis for these offsets and masks.
 
 ```txt
        X-Bits         Y-Bits        Z-Bits
 |****** TAG ******|**** SET ****|** OFFSET **|
 ```
 
-The first thing we'll calculate is the `set_offset`, which is the number of bits we need to shift over over to extract the set number (Z-Bits from our diagram). Assuming byte-addressable memory and a cache block size of 16-bytes, the number of bits (Z-Bits) would be 4. This is because 16 bytes (for a cache line) can be indexed using only 4 bits (using values `0b0000` to `0b1111`).
+The first thing we'll calculate is the `set_offset`, which is the number of bits we need to shift over over to extract the set number (Z-Bits from our diagram). Assuming byte-addressable memory and a cache `block_size` of 16-bytes, the number of bits (Z-Bits) would be 4. This is because 4 bits can represent 16 total states (values `0b0000` to `0b1111`, one for each byte in a cache block).
 
-The fundamental calculation we need is log base 2 of the cache block size (e.g. log base 2 of 16 is 4). A simple way to calculate this is by subtracting 1 from the block size then using `std::popcount` to count the number of set bits. Consider the following example where the `block_size` is 16 bytes:
+The fundamental calculation we need is log base 2 of the cache block size (e.g. log base 2 of 16 is 4). A simple way to calculate this is by subtracting 1 from `block_size` then using `std::popcount` to count the number of set bits. Consider the following example where the `block_size` is 16 bytes:
 
 ```txt
 block_size           = 16 = 0b00010000
@@ -260,9 +253,9 @@ In C++, we can do this as follows:
 auto set_offset = std::popcount(block_size - 1);
 ```
 
-This calculation is reliant on the `block_size` being a power-of-2. For all practical intents and purposes, this will always be the case.
+This calculation is reliant on the `block_size` being a power-of-2. For all practical intents and purposes, this will be the case.
 
-We next thing we need to do calculate is our `set_mask`. This will be a mask of 1s equal to the number of set bits (Y-Bits from our diagram) in our memory address. We can calculate the number of sets with the following:
+We next thing we need to do calculate is our `set_mask`. This will be a mask of 1s equal to the number of set bits (Y-Bits from our diagram) in our memory address. We can start by calculating the number of sets in our cache:
 
 ```cpp
 auto sets = capacity / (block_size * associativity);
@@ -277,13 +270,13 @@ sets           = 16 = 0b00010000
 sets - 1       = 15 = 0b00001111
 ```
 
-Because the number of sets will be a power-of-2 for all practical intents and purposes, subtracting one from than number will give us a mask of ones equal to the number of set bits (for the same reasoning as with the `set_offset` calculation).
+Because the number of sets will be a power-of-2 for all practical intents and purposes, subtracting one from than number will give us a mask of ones equal to the number of set bits (for the same reasoning as with our `set_offset` calculation).
 
 ```cpp
 set_mask = sets - 1;
 ```
 
-The final thing we need to calculate is the `tag_offset` (the number of bits to shift the address over to extract the tag). This will simply be the `set_offset` plus the number number of set bits. We can calculate this as follows:
+The final thing we need to calculate is the `tag_offset` (the number of bits to shift the address over to extract the tag). This will simply be the `set_offset` plus the number number of set bits (fundamentally, we're just shifting out the `OFFSET` and `SET` bits from the diagram). We can calculate this as follows:
 
 ```cpp
 auto set_bits = std::popcount(set_mask);
@@ -338,7 +331,7 @@ CacheSim(std::string input, unsigned bs, unsigned a, unsigned c, unsigned mp,
 
 ### Accessing the Cache
 
-Now that we have initialized our cache state, we can move into the logic for processing cache accesses. For this, we will implement the following methods:
+Now that we have initialized our cache state, we can move into the logic for processing cache accesses. We will implement the following methods:
 
 1. `probe` - A method that performs the cache access
 2. `get_set` - A helper method to get the set number from an address
@@ -359,9 +352,9 @@ int get_set(std::uint64_t address) {
 }
 ```
 
-To get the set number, we simply shift the input memory address down to get rid of the offset bits, then extract just the set bits from the address (ignoring the tag).
+To get the set number, we simply shift the input memory address down to get rid of the offset bits, then extract only the set bits from the address (ignoring the tag).
 
-Our `get_tag` method is similar except that we do not need to use a mask to extract the tag bits (because the upper bits will all be 0 in our shifted address).
+Our `get_tag` method is similar, except that we do not need to use a mask to extract the tag bits (because the upper bits will all be 0 in our shifted address).
 
 ```cpp
 // Extract the tag
@@ -400,9 +393,9 @@ std::span local_valid{valid.data() + base, associativity};
 std::span local_priority{priority.data() + base, associativity};
 ```
 
-`std::span` provides a nice way to only view a subset of a container (our vectors) at once. In our case, we can view just the data for one set from each of our vectors.
+`std::span` provides a nice way to only view a subset of a container (a vector in our case) at once. This allws us to view the data for just one cache set from each of our vectors.
 
-Next, we start implementing the actual cache line functionality. To start we implement the logic for checking if the access is a hit or a miss:
+Next, we start implementing the actual probe functionality. We will begin with the logic for checking if the access is a hit or a miss:
 
 ```cpp
   // Check each cache line in the set
@@ -434,11 +427,11 @@ Next, we start implementing the actual cache line functionality. To start we imp
 
 Our `for` loop goes over each line in the set of our cache, first checking if the current cache line is invalid. If the line is invalid, we keep track of the index (for use in replacement), and `continue` to check the next cache block (or exit if there are no more blocks to check).
 
-If the cache block is valid, we check if the tag of the access matches the block in the cache. If it does not match, we `continue` to check the next cache block (or exit if there are no more blocks to check).
+If the cache block is valid, we check if the tag of the access matches the tag of the block in the cache. If they don't match, we `continue` to check the next cache block (or exit if there are no more blocks to check).
 
-If the cache block is not invalid, and the tag of the access and block match, we have a cache hit! We therefore mark the access as a hit, save the index (for use in the replacement policy), mark the dirty bit for the block if it is a write, and break out of the loop.
+If the cache block is not invalid, and the tag in the access and block match, we have a cache hit! We therefore mark the access as a hit, save the index (to update priority later), mark the dirty bit for the block if it is a write, and break out of the loop.
 
-If the access was not a hit, we must find a cache line to replace:
+If the access was not a hit, we must implement the code to find a cache line to replace:
 
 ```cpp
 // Find an element to replace if it wasn't a hit
@@ -462,9 +455,9 @@ if (!hit) {
 }
 ```
 
-If we found an invalid cache line when initially searching the set, we will that for replacement. Otherwise, we will replace the element with the lowest priority (where the highest priority value is 0, and the lowest is `associativity - 1`). Additionally, we will set the tag and dirty bit if the access was a write.
+If we found an invalid cache line when initially searching the set, we will that for replacement. Otherwise, we will replace the element with the lowest priority (where the highest priority is `0`, and the lowest priority is `associativity - 1`). Additionally, we will set the tag and dirty bit if the access was a write.
 
-We next need to update the priority for our cache replacement policy. For this, we will use `std::transform`:
+We next need to update the priority for other lines in our cache replacement policy. For this, we will use `std::transform`:
 
 ```cpp
 // Update the priority
@@ -484,7 +477,7 @@ std::transform(begin(local_priority), end(local_priority),
 local_priority[index] = 0;
 ```
 
-Here, we decrease the priority of all elements in the span that have a higher original priority than the cache block being accessed. Then, we set the accessed block to have the highest priority (`0`).
+Here, we decrease the priority (increment the value) of all elements in the span that have a higher original priority (lower value) than the cache block being accessed. Then, we set the accessed block to have the highest priority (`0`).
 
 Finally, we return if the access was a hit/miss, and if the access caused a dirty writeback:
 
@@ -523,7 +516,7 @@ Next, I would create a sample trace with just a few accesses (these could be cop
 
 ## Recording Statistics
 
-The final step thing we need for our simulator is statistic collection. We'll implement this using a simple `update_stats` method, and small modification to our `run` method. We will also add a `dump_stats` method for printing the cache statistics (and place a call to this method in the destructor).
+The final thing we need for our simulator is statistic collection. We'll implement this using a simple `update_stats` method, and small modification to our `run` method. We will also add a `dump_stats` method for printing the cache statistics (and place a call to this method in the destructor).
 
 ### State for our Statistics
 
@@ -540,7 +533,7 @@ std::int64_t instructions_ = 0;
 
 Initially, all our statistics will be `0`.
 
-A good thing to keep in mind is that we don't need to have a unique counter for every statistic. For example, the number of reads can be calculated by subtracting `writes_` from the total number memory accesses (`mem_accesses_`).
+A good thing to keep in mind is that we don't need to have a unique counter for every statistic. For example, the number of reads can be calculated at the end of execution by subtracting `writes_` from the total number memory accesses (`mem_accesses_`).
 
 ### The Update Stats Method
 
@@ -638,6 +631,8 @@ void run() {
 }
 ```
 
+Now our `run` method will read every line from our trace file, extract the access details, simulate the cache access, then save record the statistics.
+
 ### End of Section Thoughts
 
 We've finished implementing our cache simulator! However, it's a good idea to implement these statistics as you go (and not wait until the end).
@@ -672,13 +667,46 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-While I simply hard-coded the cache configuration parameters in the `main` function, you could optionally add the as command line arguments.
+While I simply hard-coded the cache configuration parameters in the `main` function, you could optionally add the as command line arguments. Additionally, the path to the trace file is the only command line argument.
+
+To compile the simulator (`cache_sim.cpp`), I used the following command:
+
+```bash
+g++ cache_sim.cpp --std=c++2a -O3 -o cache_sim
+```
+
+Here is an example output from running the simulator with one of the traces from the original course website:
+
+```txt
+CACHE SETTINGS
+       Cache Size (Bytes): 16384
+           Associativity : 1
+       Block Size (Bytes): 16
+    Miss Penalty (Cycles): 30
+Dirty WB Penalty (Cycles): 2
+
+CACHE ACCESS STATS
+TOTAL ACCESSES: 1957764
+         READS: 1731883
+        WRITES: 225881
+
+CACHE MISS-RATE STATS
+     MISS-RATE: 28.2638
+        MISSES: 553339
+          HITS: 1404425
+
+CACHE IPC STATS
+           IPC: 0.235004
+  INSTRUCTIONS: 5136716
+        CYCLES: 21857966
+      DIRTY WB: 60540
+```
 
 ## Final Thoughts
 
-We have made it to the end of our journey! You can test your simulator using the traces found at [the original course website](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html), or write your own!
+We have made it to the end of our journey! You can test your simulator using the traces found at [the original course website](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html) and compare the results against the reference results, or write your own!
 
-As with all the code in these blog posts, there are many things we could look at improving. For example, the cache simulator we created is actually pretty slow! There are numerous optimizations we could perform, especially concerning the how we read accesses from the trace file. However, we'll leave that discussion to another blog post.
+As with all the code in these blog posts, there are many things we could improve. For example, the cache simulator we created is actually pretty slow! There are numerous optimizations we could perform, especially concerning the how we read accesses from the trace file (why read 1 access at a time when we could read a chunk of accesses!). However, we'll leave that discussion to another blog post.
 
 Thanks for reading,
 
@@ -688,5 +716,6 @@ Thanks for reading,
 
 - [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
 - [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
+- [The Cache Simulator: ](https://github.com/CoffeeBeforeArch/simple_cache_sim)
 - My Email: CoffeeBeforeArch@gmail.com
 
