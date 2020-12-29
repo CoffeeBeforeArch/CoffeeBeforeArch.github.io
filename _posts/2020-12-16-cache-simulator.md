@@ -211,34 +211,27 @@ CacheSim(std::string input, unsigned bs, unsigned a, unsigned c, unsigned mp,
   capacity = c;
   miss_penalty = mp;
   dirty_wb_penalty = wbp;
-}
 ```
 
 The next thing we need to do is resize our vectors based on the number of cache blocks for which we want to maintain state. This will simply be the capacity of our cache divided by the cache block size:
 
 ```cpp
-// Constructor
-CacheSim(std::string input, unsigned bs, unsigned a, unsigned c, unsigned mp,
-         unsigned wbp) {
-  // Initialize of input file stream object
-  infile.open(input);
+// Set all of our cache settings
+block_size = bs;
+associativity = a;
+capacity = c;
+miss_penalty = mp;
+dirty_wb_penalty = wbp;
 
-  // Set all of our cache settings
-  block_size = bs;
-  associativity = a;
-  capacity = c;
-  miss_penalty = mp;
-  dirty_wb_penalty = wbp;
+// Calculate the number of blocks
+// Assume this divides evenly
+auto num_blocks = capacity / block_size;
 
-  // Calculate the number of blocks
-  // Assume this divides evenly
-  auto num_blocks = capacity / block_size;
-
-  // Create our cache based on the number of blocks
-  tags.resize(num_blocks);
-  dirty.resize(num_blocks);
-  valid.resize(num_blocks);
-  priority.resize(num_blocks);
+// Create our cache based on the number of blocks
+tags.resize(num_blocks);
+dirty.resize(num_blocks);
+valid.resize(num_blocks);
+priority.resize(num_blocks);
 }
 ```
 
@@ -299,7 +292,234 @@ tag_offset = set_offset + set_bits;
 
 We do not need a mask to extract the tag bits because all the upper-bits of the address shifted by `tag_offset` will be zeros.
 
+Here is the full implementation of our constructor:
+
+```cpp
+// Constructor
+CacheSim(std::string input, unsigned bs, unsigned a, unsigned c, unsigned mp,
+         unsigned wbp) {
+  // Initialize of input file stream object
+  infile.open(input);
+
+  // Set all of our cache settings
+  block_size = bs;
+  associativity = a;
+  capacity = c;
+  miss_penalty = mp;
+  dirty_wb_penalty = wbp;
+
+  // Calculate the number of blocks
+  // Assume this divides evenly
+  auto num_blocks = capacity / block_size;
+
+  // Create our cache based on the number of blocks
+  tags.resize(num_blocks);
+  dirty.resize(num_blocks);
+  valid.resize(num_blocks);
+  priority.resize(num_blocks);
+
+  // Calculate values for traversal
+  // Cache lines come in the following format:
+  // |****** TAG ******|**** SET ****|** OFFSET **|
+  // Calculate the number of offset bits
+  auto block_bits = std::popcount(block_size - 1);
+
+  // Calculate the number of set bits, and create a mask of 1s
+  set_offset = block_bits;
+  auto sets = capacity / (block_size * associativity);
+  set_mask = sets - 1;
+  auto set_bits = std::popcount(set_mask);
+
+  // Calculate the bit-offset for the tag and create a mask of 1s
+  // Always use 64-bit addresses
+  tag_offset = block_bits + set_bits;
+}
+```
+
 ### Accessing the Cache
+
+Now that we have initialized our cache state, we can move into the logic for processing cache accesses. For this, we will implement the following methods:
+
+1. `probe` - A method that performs the cache access
+2. `get_set` - A helper method to get the set number from an address
+3. `get_tag` - A helper method to get the tag from an address
+
+Additionally, we will need to update our `run` method with our call to `probe`.
+
+#### Helper Method Implementations
+
+Our helper method `get_set` uses our `set_offset` and `set_mask` initialized in the constructor:
+
+```cpp
+// Extract the set number
+// Shift the set to the bottom then extract the set bits
+int get_set(std::uint64_t address) {
+  auto shifted_address = address >> set_offset;
+  return shifted_address & set_mask;
+}
+```
+
+To get the set number, we simply shift the input memory address down to get rid of the offset bits, then extract just the set bits from the address (ignoring the tag).
+
+Our `get_tag` method is similar except that we do not need to use a mask to extract the tag bits (because the upper bits will all be 0 in our shifted address).
+
+```cpp
+// Extract the tag
+// Shift the tag to the bottom
+// No need to use mask (tag is all upper remaining bits)
+std::uint64_t get_tag(std::uint64_t address) {
+  return address >> tag_offset;
+}
+```
+
+#### Probe Implementation
+
+Our `probe` method will simulate the actual cache access. To our method we will pass the type of access (read/write), and the address of the access. We will return if the access was a hit or a miss, and if the access caused the writeback of a dirty cache line.
+
+```cpp
+// Probe the cache
+std::tuple<bool, bool> probe(bool type, std::uint64_t address) { }
+```
+
+The first thing we will add is our calls to the helper methods to extract the set number and tag:
+
+```cpp
+// Calculate the set from the address
+auto set = get_set(address);
+auto tag = get_tag(address);
+```
+
+Using the cache set number, we'll create a `std::span` (C++20) for each of the vectors containing our cache state:
+
+```cpp
+// create a spans for our set
+auto base = set * associativity;
+std::span local_tags{tags.data() + base, associativity};
+std::span local_dirty{dirty.data() + base, associativity};
+std::span local_valid{valid.data() + base, associativity};
+std::span local_priority{priority.data() + base, associativity};
+```
+
+`std::span` provides a nice way to only view a subset of a container (our vectors) at once. In our case, we can view just the data for one set from each of our vectors.
+
+Next, we start implementing the actual cache line functionality. To start we implement the logic for checking if the access is a hit or a miss:
+
+```cpp
+  // Check each cache line in the set
+  auto hit = false;
+  int invalid_index = -1;
+  int index;
+  for (auto i = 0u; i < local_valid.size(); i++) {
+    // Check if the block is invalid
+    if (!local_valid[i]) {
+      // Keep track of invalid entries in case we need them
+      invalid_index = i;
+      continue;
+    }
+
+    // Check if the tag matches
+    if (tag != local_tags[i]) continue;
+
+    // We found the line, so mark it as a hit
+    hit = true;
+    index = i;
+
+    // Update dirty flag
+    local_dirty[index] |= type;
+
+    // Break out of the loop
+    break;
+  }
+```
+
+Our `for` loop goes over each line in the set of our cache, first checking if the current cache line is invalid. If the line is invalid, we keep track of the index (for use in replacement), and `continue` to check the next cache block (or exit if there are no more blocks to check).
+
+If the cache block is valid, we check if the tag of the access matches the block in the cache. If it does not match, we `continue` to check the next cache block (or exit if there are no more blocks to check).
+
+If the cache block is not invalid, and the tag of the access and block match, we have a cache hit! We therefore mark the access as a hit, save the index (for use in the replacement policy), mark the dirty bit for the block if it is a write, and break out of the loop.
+
+If the access was not a hit, we must find a cache line to replace:
+
+```cpp
+// Find an element to replace if it wasn't a hit
+auto dirty_wb = false;
+if (!hit) {
+  // First try and use an invalid line (if available)
+  if (invalid_index >= 0) {
+    index = invalid_index;
+    local_valid[index] = 1;
+  }
+  // Otherwise, evict the lowest-priority cache block (largest value)
+  else {
+    auto max_element = std::ranges::max_element(local_priority);
+    index = std::distance(begin(local_priority), max_element);
+    dirty_wb = local_dirty[index];
+  }
+
+  // Update the tag and dirty state
+  local_tags[index] = tag;
+  local_dirty[index] = type;
+}
+```
+
+If we found an invalid cache line when initially searching the set, we will that for replacement. Otherwise, we will replace the element with the lowest priority (where the highest priority value is 0, and the lowest is `associativity - 1`). Additionally, we will set the tag and dirty bit if the access was a write.
+
+We next need to update the priority for our cache replacement policy. For this, we will use `std::transform`:
+
+```cpp
+// Update the priority
+// Go through each element
+// Increase the priority of all the blocks with a lower priority than the
+// one we are accessing
+// High priority -> Low priority = 0 -> associativity - 1
+std::transform(begin(local_priority), end(local_priority),
+               begin(local_priority), [&](int p) {
+                 if (p <= local_priority[index] && p < associativity)
+                   return p + 1;
+                 else
+                   return p;
+               });
+
+// Currently accessed block has the highest priority (0)
+local_priority[index] = 0;
+```
+
+Here, we decrease the priority of all elements in the span that have a higher original priority than the cache block being accessed. Then, we set the accessed block to have the highest priority (`0`).
+
+Finally, we return if the access was a hit/miss, and if the access caused a dirty writeback:
+
+```cpp
+return {hit, dirty_wb};
+```
+
+#### Modification to the Run Method
+
+The final step to functionally model our cache is to add a call to `probe` to our `run` method:
+
+```cpp
+  // Run the simulation
+  void run() {
+    // Keep reading data from a file
+    std::string line;
+    while (std::getline(infile, line)) {
+      // Get the data for the access
+      auto [type, address, instructions] = parse_line(line);
+
+      // Probe the cache
+      auto [hit, dirty_wb] = probe(type, address);
+    }
+  }
+```
+
+Just like we did with `parse_line`, we use structured bindings (C++17) to unpack the two values returned from the `probe` method.
+
+### End of Section Thoughts
+
+We implemented many things in this section! However, it's a good idea to test each of these methods as you go.
+
+For example, I would first verify that your `get_set` and `get_tag` methods are properly extracting the fields from the memory addresses.
+
+Next, I would create a sample trace with just a few accesses (these could be copied from one of the larger trace files) that can be easily manually verified. For example, you could initially check that two accesses to the same cache line result in one hit and one miss.
 
 ## Recording Statistics
 
