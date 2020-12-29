@@ -30,7 +30,7 @@ Our simulator must fundamentally do three things:
 2. Process the cache accesses
 3. Record statistics about what happened
 
-In the following sections, we will how to implement this functionality in greater detail as we implement methods and add data members to our `CacheSim` class:
+In the following sections, we will discuss this functionality in greater detail as we implement methods and add data members to our `CacheSim` class:
 
 ```cpp
 // Our cache simulator
