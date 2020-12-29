@@ -154,6 +154,115 @@ This is a good place to stop and verify that everything works. One good way to v
 
 ## Processing Cache Accesses
 
+In this next section, we'll focus on how to model a cache and process the accesses we read and process from our trace file.
+
+### Cache State
+
+Before we can implement the funcionality of our cache model, we first need to add the appropriate state (data members) to our `CacheSim` class.
+
+The first thing we'll add are the configuration parameters. These describe the shape of our cache (block size, associativity, and capactiy), and the overheads (miss penalty and dirty writeback penalty) for each access.
+
+```cpp
+// Cache settings
+unsigned block_size;
+unsigned associativity;
+unsigned capacity;
+unsigned miss_penalty;
+unsigned dirty_wb_penalty;
+```
+
+The next thing we'll add to our cache are some offsets and masks that we'll use when extracting the set number and tag from a memory address:
+
+```cpp
+// Access settings
+unsigned set_offset;
+unsigned tag_offset;
+unsigned set_mask;
+```
+
+The final thing we'll add for functionality is actual state of our cache:
+
+```cpp
+// The actual cache state
+std::vector<std::uint64_t> tags;
+std::vector<char> dirty;
+std::vector<char> valid;
+std::vector<int> priority;
+```
+
+For each cache block, we'll store the tag at the location, if the cache block is dirty, if the cache block is valid, and the priority of the cache block w.r.t. the LRU replacement policy.
+
+### Setting Up the Cache
+
+Now that we have the data members in our `CacheSim` class, we need to initialize them. This is something we can do in our class' constructor.
+
+We'll start by expanding our constructor to also take the configuration options (block size, associativity, capacity, miss-penalty, and dirty writeback penalty) as parameters.
+
+```cpp
+// Constructor
+CacheSim(std::string input, unsigned bs, unsigned a, unsigned c, unsigned mp,
+         unsigned wbp) {
+  // Initialize of input file stream object
+  infile.open(input);
+
+  // Set all of our cache settings
+  block_size = bs;
+  associativity = a;
+  capacity = c;
+  miss_penalty = mp;
+  dirty_wb_penalty = wbp;
+}
+```
+
+The next thing we need to do is resize our vectors based on the number of cache blocks for which we want to maintain state. This will simply be the capacity of our cache divided by the cache block size:
+
+```cpp
+// Constructor
+CacheSim(std::string input, unsigned bs, unsigned a, unsigned c, unsigned mp,
+         unsigned wbp) {
+  // Initialize of input file stream object
+  infile.open(input);
+
+  // Set all of our cache settings
+  block_size = bs;
+  associativity = a;
+  capacity = c;
+  miss_penalty = mp;
+  dirty_wb_penalty = wbp;
+
+  // Calculate the number of blocks
+  // Assume this divides evenly
+  auto num_blocks = capacity / block_size;
+
+  // Create our cache based on the number of blocks
+  tags.resize(num_blocks);
+  dirty.resize(num_blocks);
+  valid.resize(num_blocks);
+  priority.resize(num_blocks);
+}
+```
+
+Note, we don't actually need to worry about the shape of our cache with sizing the vectors. This is because the shape of our cache will only affect the traversal of the vectors, not the number of total elements (which will always be equal to the number of cache blocks).
+
+The final thing we need to initialize are the offsets and mask to extract the set number and tag from a memory address. We'll be using the following memory address format as a basis for these offsets and masks.
+
+```txt
+       X-Bits         Y-Bits        Z-Bits
+|****** TAG ******|**** SET ****|** OFFSET **|
+```
+
+The first thing we'll calculate is the `set_offset`, which is the number of bits we need to shift over over to extract the set number (Z-Bits from our diagram). Assuming byte-addressable memory and a cache block size of 16-bytes, the number of bits (Z-Bits) would be 4. This is because 16 bytes (for a cache line) can be indexed using only 4 bits (using values `0b0000` to `0b1111`).
+
+The fundamental calculation we need is log base 2 of the cache block size (e.g. log base 2 of 16 is 4). A simple way to calculate this is by subtracting 1 from the block size then using `std::popcount` to count the number of set bits. Consider the following example where the block size is 16 bytes:
+
+```txt
+block_size           = 16 = 0b00010000
+block_size - 1       = 15 = 0b00001111
+popcount(0b00001111) = 4
+```
+
+This calculation is reliant on the `block_size` being a power-of-2. For all practical intents and purposes, this will always be the case.
+
 ## Recording Statistics
 
 ## Final Thoughts
