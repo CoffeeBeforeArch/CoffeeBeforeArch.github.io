@@ -523,7 +523,162 @@ Next, I would create a sample trace with just a few accesses (these could be cop
 
 ## Recording Statistics
 
+The final step thing we need for our simulator is statistic collection. We'll implement this using a simple `update_stats` method, and small modification to our `run` method. We will also add a `dump_stats` method for printing the cache statistics (and place a call to this method in the destructor).
+
+### State for our Statistics
+
+To keep track our our statistics, we'll add a few more data members to our class:
+
+```cpp
+// Cache statistics
+std::int64_t writes_ = 0;
+std::int64_t mem_accesses_ = 0;
+std::int64_t misses_ = 0;
+std::int64_t dirty_wb_ = 0;
+std::int64_t instructions_ = 0;
+```
+
+Initially, all our statistics will be `0`.
+
+A good thing to keep in mind is that we don't need to have a unique counter for every statistic. For example, the number of reads can be calculated by subtracting `writes_` from the total number memory accesses (`mem_accesses_`).
+
+### The Update Stats Method
+
+Our `update_stats` method is incredibly simple:
+
+```cpp
+// Update the stats
+void update_stats(int instructions, bool type, bool hit, bool dirty_wb) {
+  mem_accesses_++;
+  writes_ += type;
+  misses_ += !hit;
+  instructions_ += instructions;
+  dirty_wb_ += dirty_wb;
+}
+```
+
+As parameters, our method takes the number of instructions executed, the type of memory access (read/write), if the access was a hit/miss, and if the access resulted in a dirty writeback.
+
+We then update the internal stats accordingly.
+
+### The Dump Stats Method
+
+The final method we'll implement is `dump_stats`. This method will simply calculate any statistics that need to be derived, and print them to the screen:
+
+```cpp
+// Dump the statistics from simulation
+void dump_stats() {
+  // Print the cache settings
+  std::cout << "CACHE SETTINGS\n";
+  std::cout << "       Cache Size (Bytes): " << capacity << '\n';
+  std::cout << "           Associativity : " << associativity << '\n';
+  std::cout << "       Block Size (Bytes): " << block_size << '\n';
+  std::cout << "    Miss Penalty (Cycles): " << miss_penalty << '\n';
+  std::cout << "Dirty WB Penalty (Cycles): " << dirty_wb_penalty << '\n';
+  std::cout << '\n';
+
+  // Print the access breakdown
+  std::cout << "CACHE ACCESS STATS\n";
+  std::cout << "TOTAL ACCESSES: " << mem_accesses_ << '\n';
+  std::cout << "         READS: " << mem_accesses_ - writes_ << '\n';
+  std::cout << "        WRITES: " << writes_ << '\n';
+  std::cout << '\n';
+
+  // Print the miss-rate breakdown
+  std::cout << "CACHE MISS-RATE STATS\n";
+  double miss_rate = (double)misses_ / (double)mem_accesses_ * 100.0;
+  auto hits = mem_accesses_ - misses_;
+  std::cout << "     MISS-RATE: " << miss_rate << '\n';
+  std::cout << "        MISSES: " << misses_ << '\n';
+  std::cout << "          HITS: " << hits << '\n';
+  std::cout << '\n';
+
+  // Print the instruction breakdown
+  std::cout << "CACHE IPC STATS\n";
+  auto cycles = miss_penalty * misses_;
+  cycles += dirty_wb_penalty * dirty_wb_;
+  cycles += instructions_;
+  double ipc = (double)instructions_ / (double)cycles;
+  std::cout << "           IPC: " << ipc << '\n';
+  std::cout << "  INSTRUCTIONS: " << instructions_ << '\n';
+  std::cout << "        CYCLES: " << cycles << '\n';
+  std::cout << "      DIRTY WB: " << dirty_wb_ << '\n';
+}
+```
+
+We will also add a call to this method in the destructor:
+
+```cpp
+// Destructor
+~CacheSim() {
+  infile.close();
+  dump_stats();
+}
+```
+
+### Modification to the Run Method
+
+We can complete our `run` method by adding a call to `update_stats`:
+
+```cpp
+// Run the simulation
+void run() {
+  // Keep reading data from a file
+  std::string line;
+  while (std::getline(infile, line)) {
+    // Get the data for the access
+    auto [type, address, instructions] = parse_line(line);
+
+    // Probe the cache
+    auto [hit, dirty_wb] = probe(type, address);
+
+    // Update the cache statistics
+    update_stats(instructions, type, hit, dirty_wb);
+  }
+}
+```
+
+### End of Section Thoughts
+
+We've finished implementing our cache simulator! However, it's a good idea to implement these statistics as you go (and not wait until the end).
+
+For example, I'd first add statistics for reads/writes and instruction count before implementing the logic for hits/misses (since they are independent of each other).
+
+## Running the Simulator
+
+If all has gone according to plan, you should be able to run your simulator! Here is the `main` function I used to create and start my simulator:
+
+```cpp
+int main(int argc, char *argv[]) {
+  // Kill the program if we didn't get an input file
+  assert(argc == 2);
+
+  // File location
+  std::string location(argv[1]);
+
+  // Hard coded cache settings
+  unsigned block_size = 1 << 4;
+  unsigned associativity = 1 << 0;
+  unsigned capacity = 1 << 14;
+  unsigned miss_penalty = 30;
+  unsigned dirty_wb_penalty = 2;
+
+  // Create our simulator
+  CacheSim simulator(location, block_size, associativity, capacity,
+                     miss_penalty, dirty_wb_penalty);
+  simulator.run();
+
+  return 0;
+}
+```
+
+While I simply hard-coded the cache configuration parameters in the `main` function, you could optionally add the as command line arguments.
+
 ## Final Thoughts
+
+We have made it to the end of our journey! You can test your simulator using the traces found at [the original course website](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html), or write your own!
+
+As with all the code in these blog posts, there are many things we could look at improving. For example, the cache simulator we created is actually pretty slow! There are numerous optimizations we could perform, especially concerning the how we read accesses from the trace file. However, we'll leave that discussion to another blog post.
 
 Thanks for reading,
 
