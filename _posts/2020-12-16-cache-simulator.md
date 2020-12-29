@@ -65,7 +65,7 @@ std::ifstream infile;
 
 The first thing we need to set up for our `std::ifstream` object is opening and closing the file. We'll follow the programming technique RAII (resource acquisition is initialization) for this, which binds the life cycle of a resource (the file we'll be opening) to the lifetime of the object (our `CacheSim` object).
 
-Specifically, we will be opening the file in the constructor of our `CacheSim`, and closing it in the destructor. We'll start with our constructor which will take a single `std::string` (the path to the trace file to open). Inside the constructor, we will call the `open` method for our `ifstream` object:
+Specifically, we will be opening the file in the `CacheSim` constructor, and closing it in the destructor. We'll start with our constructor which will take a single `std::string` (the path to the trace file to open). Inside the constructor, we will call the `open` method for our `ifstream` object:
 
 ```cpp
 // Constructor
