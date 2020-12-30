@@ -9,13 +9,13 @@ Computer architects use many tools to evaluate proposed architectures. They may 
 
 Microarchitecture simulators can provide researchers with a decently accurate view of how hardware will behave in a reasonable amount of time, and are used extensively in both research and industry. This makes them a great thing to get familiar with if you are interested in hardware and architecture.
 
-In this blog post we'll be looking at how to write a trace-based cache simulator based on the course assignment I found here [here](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html). This should provide a (relatively) simple entry point for those interested in simulator design and implementation, and give you ideas on how you could design your own,independent of things like the specific trace format we use in this blog post.
+In this blog post we'll be looking at how to write a trace-based cache simulator based on the course assignment I found [here](https://occs.oberlin.edu/~ctaylor/classes/210SP13/cache.html). This should provide a (relatively) simple entry point for those interested in simulator design and implementation, and give you ideas on how you could design your own,independent of things like the specific trace format we use in this blog post.
 
 ### Link to the source code
 
-- [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
-- [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
-- [The Cache Simulator: ](https://github.com/CoffeeBeforeArch/simple_cache_sim)
+- [My YouTube Channel](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
+- [My GitHub Account](https://github.com/CoffeeBeforeArch)
+- [The Cache Simulator](https://github.com/CoffeeBeforeArch/simple_cache_sim)
 - My Email: CoffeeBeforeArch@gmail.com
 
 ## Trace-Based Simulator Basics
@@ -714,8 +714,8 @@ Thanks for reading,
 
 ### Link to the source code
 
-- [My YouTube Channel: ](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
-- [My GitHub Account: ](https://github.com/CoffeeBeforeArch)
-- [The Cache Simulator: ](https://github.com/CoffeeBeforeArch/simple_cache_sim)
+- [My YouTube Channel](https://www.youtube.com/channel/UCsi5-meDM5Q5NE93n_Ya7GA?view_as=subscriber)
+- [My GitHub Account](https://github.com/CoffeeBeforeArch)
+- [The Cache Simulator](https://github.com/CoffeeBeforeArch/simple_cache_sim)
 - My Email: CoffeeBeforeArch@gmail.com
 
