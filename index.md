@@ -49,6 +49,8 @@ The content I create reflects how I would have wanted to learn about programming
 
 - [Building a Trace-Based Cache Simulator]({% post_url 2020-12-16-cache-simulator %})
 
+- [Duplicate Removal]({% post_url 2021-03-29-duplicate-removal %})
+
 ## Spinlocks
 
 - [Spinlocks - Part 1 - A Basic Spinlock]({% post_url 2020-11-07-spinlocks-1 %})
