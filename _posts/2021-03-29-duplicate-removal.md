@@ -239,7 +239,7 @@ Our baseline is over 2x faster than the new implementation!
 
 ## Unordered Set + Copy
 
-While our `unordered_set` implementation gave us a massive increase in performance, we changes the problem slightly. We're no longer returning a `std::vector<int>`, but a `std::unordered_set<int>`. To make a truly fair comparison, we should also include the time it takes to copy from our `unordered_set` into the output vector.
+While our `unordered_set` implementation gave us a massive increase in performance, we altered the original problem. We're no longer returning a `std::vector<int>`, but a `std::unordered_set<int>`. To make this a truly fair comparison, we should also include the time it takes to copy from our `unordered_set` into an output vector.
 
 We can implement this as follows:
 
@@ -251,11 +251,11 @@ for (auto i : v_in) filter.insert(i);
 for (auto i : filter) v_out.push_back(i);
 ```
 
-In addition to method of filtering from the previous example, we have an additional `for` loop where we copy the unique elements in our `std::unordered_map<int>` named `filter` to an output `std::vector<int>` named `v_out`.
+In addition to the method of filtering from the previous example, we have an additional `for` loop where we copy the unique elements in our `std::unordered_map<int>` named `filter` to an output `std::vector<int>` named `v_out`.
 
 ### Performance and Analysis
 
-Using the same benchmark setup as our baseline, here are the performance results:
+Using the same benchmark setup as our baseline, here are the performance results from my machine:
 
 ```txt
 -----------------------------------------------------------------
@@ -275,17 +275,19 @@ hash_set_copy/12/1000        53.3 us         53.3 us        12897
 hash_set_copy/12/10000        128 us          128 us         5415
 ```
 
-Our results our very similar to our original `unordered_set` implementation with the exception that most execution times are slightly longer. This is most noticeable when the data distribution is very wide (e.g., 0-10000) because the expected number of unique values we must copy from `filter` to `v_out` is much larger than the expected value when the data distribution is very narrow (e.g., 0-10). 
+Our results are very similar to our original `unordered_set` implementation with the exception that most execution times are slightly longer. This can be attributed to the additional copy of data from our `unordered_set` to the output `std::vector`.
+
+The copy overhead is most noticeable when the data distribution is very wide (e.g., 0-10000). This is because the expected number of unique values we must copy from `filter` to `v_out` is much larger than the expected number when the data distribution is very narrow (e.g., 0-10).
 
 ## Final Thoughts
 
-Much of performance optimization is finding ways to do less work, be that algorithmically, through compiler optimizations, or through tuning our code to our hardware to avoid things like wasted data movement. In this blog post, we looked a fairly simple way to filter duplicates from a vector of integers using an `unordered_set`, which allowed us to avoid a linear scan of a vector for each input element.
+Much of performance optimization is finding ways to do less work, be that algorithmically, through compiler optimizations, or through tuning our code to our hardware to avoid things like wasted data movement. In this blog post, we looked a fairly simple way to filter duplicates from a vector of integers using an `unordered_set` which allowed us to avoid a linear scan of a vector for each input element.
 
 Through our experiments, we learned a few important lessons:
 
-1. Performance can be influenced by size of our data and what values are in the data
+1. Performance can be influenced by both the size of the data and the values of the data
 2. Different containers work better in different situations
-3. Brute force solutions can be faster in some circumstances
+3. Brute force solutions can be effective in certain circumstances
 
 Thanks for reading,
 
