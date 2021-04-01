@@ -5,7 +5,7 @@ title: Duplicate Removal
 
 # Duplicate Removal
 
-One of the most imporant parts of planning for performance is choosing the right algorithms. Importantly, this extends to all parts of our code (not just just things like sorting!). If we choose the wrong algorithm, we may still be able to optimize it. However, the correct algorithm will generally allows us to scale performance much further than a "worse" algorithm that has been effectively iteratively.
+One of the most imporant parts of planning for performance is choosing the right algorithms. Importantly, this extends to all parts of our code (not just just things like sorting!). If we choose the wrong algorithm, we may still be able to optimize it. However, the correct algorithm will generally allows us to scale performance much further than a "worse" algorithm that has been significantly optimized.
 
 In this blog post, we will be taking a look at some different ways we can filter duplicate values from a `std::vector<int>`. We will study the performance of these methods and examine them under different circumstances (changing the size of the vectors and distributions of the input data).
 
