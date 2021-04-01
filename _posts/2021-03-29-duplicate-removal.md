@@ -20,9 +20,9 @@ In this blog post, we will be taking a look at some different ways we can filter
 
 The goal of our duplicate removal method will be to take in a vector of random number (e.g. `1, 2, 3, 1, 2, 3`), and return a vector without any duplicates (e.g., `1, 2, 3`). One of the most simple ways we can solve this is the brute-force approach.
 
-For this method, we'll iterate for each element in the input vector, and check if it is in the output vector. If it is not in the output vector, we will add it, otherwise, we'll continue to the next element in the input vector.
+For this method, we'll iterate for each element in the input vector and check if it is in the output vector. If it is not in the output vector, we will add it, otherwise we will proceed to the next element in the input vector.
 
-We can implement this using as follows:
+We can implement this algorithm using as follows:
 
 ```cpp
 // For every value in the input vector
@@ -36,11 +36,11 @@ for (auto i : v_in) {
 
 For every element in `v_in`, we use `std::find` to check the element is in the output vector `v_out`. If it is not in the vector (`std::find` returned `v_out.end()`) we add the element to `v_out`.
 
-The amount of work done each iteration of the outer `for` loop monotonically increases over the loop iterations. This is because the number of potential elements in `v_out` we have to scan monotonically increases over the loop iterations as we find non-duplicate elements.
+The amount of work done each iteration of the outer `for` loop monotonically increases over the loop iterations. This is because the number of elements we scan in `v_out` monotonically increases over the loop iterations as we find more non-duplicate elements to add to the output vector.
 
 ### Benchmark Setup
 
-We can use Google benchmark to measure the performance of our baseline implementation. Here is the basic structure:
+We can use Google benchmark to measure the performance of our filter implementations. Here is the basic structure of what I used:
 
 ```cpp
 // Baseline benchmark used by sorting vectors
@@ -77,7 +77,7 @@ BENCHMARK(baseline)->Apply(custom_args)->Unit(benchmark::kMicrosecond);
 
 We first create our vectors `v_in` and `v_out`, and fill `v_in` with random numbers. We then fall into our main benchmarking loop (`for (auto _ : s) {  }`) where we have our filter implementation.
 
-We will be studying vectors with 2^10, 2^11, and 2^12 elements. Additionally, we will be looking at random numbers between 0 and 10, 100, 1000, and 10000. These are configured with our `custom_args` function:
+We will be studying vectors with 2^10, 2^11, and 2^12 elements. Additionally, we will be looking at random numbers between 0 and 10, 100, 1000, and 10000. These are configured with a function named `custom_args`:
 
 ```cpp
 // Function for generating argument pairs
@@ -112,12 +112,12 @@ baseline/12/1000         340 us          340 us         2058
 baseline/12/10000       1127 us         1127 us          617
 ```
 
-There are two noticable trends from this data:
+There are two noticeable trends from this data:
 
 1. Execution time increases as we increase the size of our vectors
-2. Execution time increases as the range distribution of random numbers increases
+2. Execution time increases as the we widen distribution of pur input data
 
-The first trend can be easily explained. Sifting through a larger number of elements takes longer than a smaller number of elements. For example, here are the results for the three vector sizes when the random numbers are kept between 0 and 100:
+The first trend can be easily explained. Sifting through a larger number of elements takes longer than a sifting through smaller number of elements. For example, here are the results for the three vector sizes when the distribution of random numbers is fixed to between 0 and 100:
 
 ```txt
 ------------------------------------------------------------
@@ -130,9 +130,9 @@ baseline/12/100         74.1 us         74.1 us         9468
 
 We see a ~2-3x increase in execution time (occasionally larger for different data distributions) each time `v_in` grows by 2x.
 
-The second trend forces us to think about how our algorithm operates when the distribution of values inside `v_in` varies. As we widen the range of potential values from our random number generator, the number of potential unique elements along with the expected number of unique values in `v_in` increases. This means that our output vector `v_out` may grow larger and larger as the input data distribution widens, leading to `std::find` having to sift through more and more elements each iteration of the `for` loop.
+The second trend forces us to think about how our algorithm operates when the distribution of values inside `v_in` varies. As we widen the range of input data, the number of potential unique elements along with the expected number of unique values in `v_in` increases. This means that our output vector `v_out` is likely to grow larger and larger, and `std::find` will scan more and more elements in `v_out` on each iteration of the `for` loop.
 
-Here are the results for `v_in` with 2^12 elements with our four different data distributions:
+Here are the results for when the size of `v_in` is fixed to 2^12 elements and we vary the data distribution:
 
 ```txt
 ------------------------------------------------------------
@@ -144,17 +144,17 @@ baseline/12/1000         340 us          340 us         2058
 baseline/12/10000       1127 us         1127 us          617
 ```
 
-At first, increasing the range of our random numbers by 10x only increases execution time by ~2x (from 30us to 74us). However, increasing the range by another 10x increases execution time by ~4.5x (from 74us to 340us), then by ~3.3x (from 340us to 1127us).
+At first, increasing the range of our random numbers by 10x only increases execution time by ~2x (from 30us to 74us). However, increasing the range by another 10x increases execution time by ~4.5x (from 74us to 340us), then by an additional ~3.3x (from 340us to 1127us) when the range is extended by another factor of 10.
 
-This means that between our most narrow (0-10) and widest (0-10000) distributions of data, our execution time increases by ~37x!
+Between our most narrow (0-10) and widest (0-10000) distributions of data, our execution time differs by ~37x to process the same number of elements (2^12)!
 
 ## Unordered Set
 
-While there's nothing we can do about the increasing size of `v_in`, we may be able to decrease the time it takes to figure out if a value is duplicate. Instead of using a `std::vector<int>` to store our output elements, we can use an `unordered_set<int>`.
+While there is nothing we can do about the increasing size of `v_in`, we may be able to decrease the time it takes to determine if a value is duplicate. Instead of using a `std::vector<int>` to store our output elements, we can use an `unordered_set<int>`.
 
-The `unordered_set` is a set of unique objects of type `key` (where `key` is an `int` in this case), where each object is stored in a bucket according its hash value.
+The `unordered_set` is a set of unique objects of type `key` (where `key` is an `int` in this example), where each object is stored in a bucket according its hash value.
 
-The benefit of this approach is that we can change the `std::find` of `v_out` to an `insert` into our `unordered_set` (where the duplicate values simply override each other because they go to the same bucket). Unlike `std::find` which has a linear time complexity, `insert` has constant time complexity (the cost of hashing the object).
+The benefit of this data structure is that we can change the `std::find` of our input value in `v_out` to an `insert` into our `unordered_set` (where the duplicate values simply overwrite each other). Unlike `std::find` which has a linear time complexity, `insert` has constant time complexity (the cost of hashing the object).
 
 We can implement this as follows:
 
@@ -164,13 +164,13 @@ We can implement this as follows:
 for (auto i : v_in) filter.insert(i);
 ```
 
-Where `v_in` is still our `std::vector<int>` and `filter` is our `std::unordered_set<int>`.
+`v_in` is still our `std::vector<int>`, and `filter` is our `std::unordered_set<int>`.
 
 One important thing to note (depending on your use-case) is that we have broken the ordering of output elements w.r.t each other by moving from a `std::vector` to an `unordered_set`.
 
 ### Performance and Analysis
 
-Using the same benchmark setup as our baseline, here are the performance results:
+Using the same benchmark setup as our baseline, here are the performance results from my machine:
 
 ```txt
 ------------------------------------------------------------
@@ -190,7 +190,7 @@ hash_set/12/1000        52.2 us         52.2 us        13070
 hash_set/12/10000        118 us          118 us         5790
 ```
 
-Both trends in performance we saw in our baseline example still exist (larger vectors take longer to filter, and a wider data distrubtion takes longer to filter than a narrower ones). If we look at the 0-100 data distribution for our 3 vector sizes, we see a ~2x increase in execution time with each 2x increase in the size of `v_in`:
+Both performance trends we saw in our baseline example still exist (larger vectors take longer to filter, and a wider data distrubtion takes longer to filter than a narrower ones). If we look at the 0-100 data distribution for our 3 vector sizes, we see a ~2x increase in execution time with each 2x increase in the size of `v_in`:
 
 ```txt
 ------------------------------------------------------------
@@ -203,7 +203,9 @@ hash_set/12/100         27.0 us         27.0 us        25299
 
 This is similar to, if not slightly better than our baseline implementation (and approxiamtely true for all other data distributions in our results).
 
-However, our `unordered_set` implementation scales far better than the baseline as we wide our data distributions. Here are the results if we fix the size of the vector to 2^12:
+However, our `unordered_set` implementation scales *far* better than the baseline as we widen our data distributions.
+
+Here are the results if we fix the size of the vector to 2^12:
 
 ```txt
 ------------------------------------------------------------
@@ -215,13 +217,13 @@ hash_set/12/1000        52.2 us         52.2 us        13070
 hash_set/12/10000        118 us          118 us         5790
 ```
 
-Unlike our baseline implementation, we see almost no difference in execution time as we increase the range of our data from 0 and 10, to 0 and 100 (24.8us to 27.0us). Increasing the range of values by another factor of 10 increases execution time by less than 2x (from 27.0us to 52.2us). Similarly, the final range increase by a factor of 10 leads to an execution time increase of just over 2x (from 52.2us to 118us).
+Unlike our baseline implementation, we see almost no difference in execution time as we increase the range of our data from 0-10, to 0-100 (24.8us vs 27.0us). Increasing the range of values by another factor of 10 increases execution time by less than 2x (from 27.0us to 52.2us). Increasing by a factor of 10 again leads to an execution time increase of just over 2x (from 52.2us to 118us).
 
-Between our narrowest and widest data distribution, our performance only dropped by a factor of ~4.5x (much better than the ~37x from the baseline implementation)
+Between our narrowest and widest data distribution, our performance only dropped by a factor of ~4.5x (much better than the ~37x from the baseline implementation).
 
-Another interesting thing to note is that our baseline implemention often fares better than our `unordered_set` one for narrow data distributions (namely 0-10). This likely comes down to the cost of our linear search of the output vector `v_out` as compared to the cost of insertion into the `unordered_set`.
+Another interesting thing to note is that our baseline implemention often fares better than our `unordered_set`  when the data distribution is narrow (e.g., 0-10). This likely comes down to the cost of our linear search of the output vector `v_out` compared to the cost of insertion into the `unordered_set`.
 
-When we have very few unique values in our input data, there will be very few values to scan in the output vector. That means that while we still have to do a linear search to check if each value is a duplicate, it is an inexpensive search, and can (potentially) be done faster than the hashing process of our `unordered_set`.
+When we have very few unique values in our input data, there will be very few values to scan in the output vector when we check for duplicates. That means that a linear search of the `v_out` vector will be relatively inexpensive, and can (potentially) be done faster than the hashing process of our `unordered_set`.
 
 We can see an example of this with our vector with 2^10 input elements and data values between 0 and 10:
 
@@ -233,7 +235,7 @@ baseline/10/10          2.80 us         2.80 us       258206
 hash_set/10/10          6.34 us         6.34 us       110265
 ```
 
-Our baseline is over 2x faster than our new implementation!
+Our baseline is over 2x faster than the new implementation!
 
 ## Unordered Set + Copy
 
