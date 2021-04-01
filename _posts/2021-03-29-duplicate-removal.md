@@ -115,7 +115,7 @@ baseline/12/10000       1127 us         1127 us          617
 There are two noticeable trends from this data:
 
 1. Execution time increases as we increase the size of our vectors
-2. Execution time increases as the we widen distribution of pur input data
+2. Execution time increases as the we widen the distribution of our input data
 
 The first trend can be easily explained. Sifting through a larger number of elements takes longer than a sifting through smaller number of elements. For example, here are the results for the three vector sizes when the distribution of random numbers is fixed to between 0 and 100:
 
