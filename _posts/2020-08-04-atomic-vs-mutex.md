@@ -234,7 +234,7 @@ In this section, we'll look at a few different implementations of matrix multipl
 
 ### Statically Mapped Elements
 
-We can parallelize matrix multiplication without without synchronization mechanisms if we have threads work on different parts of the output matrix. Here is an example implementation that performs some cache tiling for even better performance:
+We can parallelize matrix multiplication without synchronization mechanisms if we have threads work on different parts of the output matrix. Here is an example implementation that performs some cache tiling for even better performance:
 
 ```cpp
  // Blocked column parallel implementation w/o atomic
